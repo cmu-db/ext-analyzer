@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/duckdb_spatial.git",
+  "folder_name": "duckdb_spatial",
+  "test_directories": ["test/sql", "test/sql/gdal", "test/sql/geometry", "test/sql/geos", "test/sql/index", "test/sql/postgis", "test/sql/shapefile"],
+  "source_dir": "spatial/src"
+}

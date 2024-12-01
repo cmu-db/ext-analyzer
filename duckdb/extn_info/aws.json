@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/duckdb_aws.git",
+  "folder_name": "duckdb_aws",
+  "test_directories": ["test/sql"],
+  "source_dir": "src"
+}

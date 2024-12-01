@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/postgres_scanner.git",
+  "folder_name": "postgres_scanner",
+  "test_directories": ["test/sql/misc", "test/sql/scanner", "test/sql/storage"],
+  "source_dir": "src"
+}

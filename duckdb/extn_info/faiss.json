@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/duckdb-faiss-ext/duckdb-faiss-ext.git",
+  "folder_name": "duckdb-faiss-ext",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

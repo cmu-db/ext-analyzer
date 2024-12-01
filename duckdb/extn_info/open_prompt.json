@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/quackscience/duckdb-extension-openprompt.git",
+  "folder_name": "duckdb-extension-openprompt",
+  "test_directories": [],
+  "community": true,
+  "source_dir": "src"
+}

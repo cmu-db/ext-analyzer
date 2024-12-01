@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/substrait.git",
+  "folder_name": "substrait",
+  "test_directories": ["test/sql"],
+  "source_dir": "src"
+}

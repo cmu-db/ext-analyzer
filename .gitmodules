@@ -1,0 +1,6 @@
+[submodule "duckdb/duckdb"]
+	path = duckdb/duckdb
+	url = https://github.com/duckdb/duckdb.git
+[submodule "duckdb/duckdb-sqllogictest-python"]
+	path = duckdb/duckdb-sqllogictest-python
+	url = https://github.com/duckdb/duckdb-sqllogictest-python.git

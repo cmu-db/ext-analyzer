@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/rustyconover/duckdb-evalexpr-rhai-extension.git",
+  "folder_name": "duckdb-evalexpr-rhai-extension",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

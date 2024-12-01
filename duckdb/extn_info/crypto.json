@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/rustyconover/duckdb-crypto-extension.git",
+  "folder_name": "duckdb-crypto-extension",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

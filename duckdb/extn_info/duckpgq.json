@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/cwida/duckpgq-extension.git",
+  "folder_name": "duckpgq-extension",
+  "community": true,
+  "test_directories": ["test/sql", "test/sql/create_pg", "test/sql/path_finding", "test/sql/pattern_matching", "test/sql/scalar", "test/sql/snb"],
+  "source_dir": "src"
+}

@@ -1,0 +1,6 @@
+{
+  "core_folder": "parquet",
+  "folder_name": "parquet",
+  "test_directories": [],
+  "source_dir": "."
+}

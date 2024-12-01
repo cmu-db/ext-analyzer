@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/polydbms/sheetreader-duckdb.git",
+  "folder_name": "sheetreader-duckdb",
+  "test_directories": [],
+  "community": true,
+  "source_dir": "src"
+}

@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/duckdb_delta.git",
+  "folder_name": "duckdb_delta",
+  "test_directories": ["test/sql/dat", "test/sql/delta_kernel_rs", "test/sql/generated"],
+  "source_dir": "src"
+}

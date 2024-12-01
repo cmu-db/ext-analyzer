@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/quackscience/duckdb-extension-clickhouse-sql.git",
+  "folder_name": "duckdb-extension-clickhouse-sql",
+  "test_directories": ["chsql/test/sql"],
+  "community": true,
+  "source_dir": "chsql/src"
+}

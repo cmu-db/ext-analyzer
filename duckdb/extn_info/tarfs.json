@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/Maxxen/duckdb_tarfs.git",
+  "folder_name": "duckdb_tarfs",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/duckdb_vss.git",
+  "folder_name": "duckdb_vss",
+  "test_directories": ["test/sql/hnsw", "test/sql/slow"],
+  "source_dir": "src"
+}

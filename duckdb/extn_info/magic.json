@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/carlopi/duckdb_magic.git",
+  "folder_name": "duckdb_magic",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

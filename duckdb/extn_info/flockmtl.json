@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/dsg-polymtl/duckdb-flockmtl.git",
+  "folder_name": "duckdb-flockmtl",
+  "test_directories": [],
+  "community": true,
+  "source_dir": "src"
+}

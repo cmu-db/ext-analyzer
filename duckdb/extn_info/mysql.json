@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/duckdb_mysql.git",
+  "folder_name": "duckdb_mysql",
+  "test_directories": ["test/sql"],
+  "source_dir": "src"
+}

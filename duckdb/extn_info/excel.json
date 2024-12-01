@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/duckdb_excel.git",
+  "folder_name": "duckdb_excel",
+  "test_directories": ["test/sql/excel"],
+  "source_dir": "extension/excel"
+}

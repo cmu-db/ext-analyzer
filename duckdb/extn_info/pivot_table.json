@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/Alex-Monahan/pivot_table.git",
+  "folder_name": "pivot_table",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

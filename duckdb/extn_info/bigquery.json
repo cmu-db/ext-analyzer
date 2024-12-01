@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/hafenkran/duckdb-bigquery.git",
+  "folder_name": "duckdb-bigquery",
+  "test_directories": ["test/sql/bigquery", "test/sql/local"],
+  "community": true,
+  "source_dir": "src"
+}

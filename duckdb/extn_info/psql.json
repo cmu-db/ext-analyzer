@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/ywelsch/duckdb-psql.git",
+  "folder_name": "duckdb-psql",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

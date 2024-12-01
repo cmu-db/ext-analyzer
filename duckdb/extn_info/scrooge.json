@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/pdet/Scrooge-McDuck.git",
+  "folder_name": "Scrooge-McDuck",
+  "test_directories": ["test/sql/scrooge"],
+  "community": true,
+  "source_dir": "src"
+}

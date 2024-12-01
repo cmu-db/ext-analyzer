@@ -1,0 +1,6 @@
+{
+  "github": "https://github.com/duckdb/sqlite_scanner.git",
+  "folder_name": "sqlite_scanner",
+  "test_directories": ["test/sql/scanner", "test/sql/storage"],
+  "source_dir": "src"
+}

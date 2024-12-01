@@ -1,0 +1,6 @@
+{
+  "core_folder": "jemalloc",
+  "folder_name": "jemalloc",
+  "test_directories": [],
+  "source_dir": "."
+}

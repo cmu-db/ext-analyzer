@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/quackscience/duckdb-extension-httpserver.git",
+  "folder_name": "duckdb-extension-httpserver",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

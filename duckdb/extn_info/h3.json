@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/isaacbrodsky/h3-duckdb.git",
+  "folder_name": "h3-duckdb",
+  "test_directories": ["test/sql/h3"],
+  "community": true,
+  "source_dir": "src"
+}

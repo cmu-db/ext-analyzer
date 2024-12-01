@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/duckdb/extension-template.git",
+  "folder_name": "extension-template",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}

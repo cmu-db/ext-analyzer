@@ -1,0 +1,7 @@
+{
+  "github": "https://github.com/ywelsch/duckdb-prql.git",
+  "folder_name": "duckdb-prql",
+  "test_directories": ["test/sql"],
+  "community": true,
+  "source_dir": "src"
+}
