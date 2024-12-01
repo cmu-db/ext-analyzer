@@ -1,0 +1,5 @@
+{
+  "github": "https://github.com/little-brother/sqlite-extensions.git",
+  "file": "exec/src/exec.c",
+  "windows": true
+}

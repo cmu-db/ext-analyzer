@@ -1,0 +1,1 @@
+rm -rf sqlite-autoconf-3420000 sqlite-autoconf-3420000.tar.gz

@@ -1,0 +1,4 @@
+{
+  "github": "https://github.com/mlin/genomicsqlite",
+  "entry_point": "sqlite3_genomicsqlite_init"
+}

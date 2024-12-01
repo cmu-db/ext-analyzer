@@ -1,0 +1,4 @@
+{
+  "github": "https://github.com/andreasbell/sqlite_protobuf",
+  "entry_point": "sqlite3_sqliteprotobuf_init"
+}
