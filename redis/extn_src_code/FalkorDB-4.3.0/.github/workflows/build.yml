@@ -1,0 +1,330 @@
+name: Build on ubuntu
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master, "[0-9]+.[0-9]+"]
+  push:
+    branches:
+      - master
+      - "[0-9]+.[0-9]+"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  create-runners:
+    strategy:
+      matrix:
+        arm_machine:
+          - build
+          - unit-tests
+          - flow-tests
+          - tck-tests
+          - fuzz-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create Arm runners
+        id: create-runner
+        uses: FalkorDB/gce-github-runner@install_docker
+        with:
+          token: ${{ secrets.GH_SA_TOKEN }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          machine_zone: ${{ vars.GCP_ZONE }}
+          machine_type: t2a-standard-4
+          network: gh-runner
+          runner_label: ${{ matrix.arm_machine }}-${{ github.run_id }}-${{ github.run_number }}
+          arm: true
+          image: projects/debian-cloud/global/images/debian-11-bullseye-arm64-v20240611
+          disk_size: 100
+
+  build:
+    needs: create-runners
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || format('build-{0}-{1}', github.run_id, github.run_number)  }}
+    container: falkordb/falkordb-build:latest
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    env:
+      ARCH_SUFFIX: ${{ matrix.platform == 'linux/amd64' && 'x64' || 'arm64v8' }}
+    steps:
+      - name: Safe dir
+        run: git config --global --add safe.directory '*'
+
+      - uses: actions/checkout@v4
+        with:
+          set-safe-directory: "*"
+          submodules: recursive
+
+      - name: Cache GraphBLAS ${{ matrix.platform }}
+        id: cache_graphblas
+        uses: actions/cache@v4
+        with:
+          path: /FalkorDB/bin/linux-${{ env.ARCH_SUFFIX  }}-release/GraphBLAS
+          key: graphblas-${{ env.ARCH_SUFFIX  }}-${{ hashFiles('./deps/GraphBLAS/Include/GraphBLAS.h') }}
+
+      - name: Cache parser ${{ matrix.platform }}
+        id: cache_parser
+        uses: actions/cache@v4
+        with:
+          path: /FalkorDB/bin/linux-${{ env.ARCH_SUFFIX  }}-release/libcypher-parser
+          key: parser-${{ env.ARCH_SUFFIX  }}-${{ hashFiles('./deps/libcypher-parser/lib/src/parser.c') }}
+
+      - name: Cache search ${{ matrix.platform }}
+        id: cache_search
+        uses: actions/cache@v4
+        with:
+          path: /FalkorDB/bin/linux-${{ env.ARCH_SUFFIX  }}-release/search-static
+          key: search-${{ env.ARCH_SUFFIX  }}-${{ hashFiles('./deps/RediSearch/src/version.h') }}
+
+      # Make sure the working directory is static between runs
+      # and always the same for the CMake cache
+      - name: Relocate source
+        run: |
+          mkdir -p /FalkorDB
+          mv $GITHUB_WORKSPACE/* /FalkorDB
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          # network=host driver-opt needed to push to local registry
+          driver-opts: network=host
+
+      - name: Build compiler image
+        id: build_compiler
+        uses: docker/build-push-action@v5
+        with:
+          context: /FalkorDB
+          file: /FalkorDB/build/docker/Dockerfile.compiler
+          platforms: ${{ matrix.platform }}
+          tags: localhost:5000/falkordb/falkordb-compiler
+          # outputs: type=docker,dest=/tmp/falkordb-compiler.tar
+          push: true
+          build-args: |
+            TARGETPLATFORM=${{ matrix.platform }}
+
+      - name: Copy bin from docker for caching
+        working-directory: /FalkorDB
+        if: steps.cache_graphblas.outputs.cache-hit == false || steps.cache_parser.outputs.cache-hit == false || steps.cache_search.outputs.cache-hit == false
+        run: |
+          id=$(docker create --platform=${{ matrix.platform }} localhost:5000/falkordb/falkordb-compiler)
+          docker cp $id:/FalkorDB/bin .
+          docker rm -v $id
+          ls -l -R /FalkorDB/bin
+
+      - name: Build tests image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: /FalkorDB/tests/Dockerfile
+          outputs: type=docker,dest=/tmp/falkordb-tests-${{ env.ARCH_SUFFIX }}.tar
+          tags: falkordb/falkordb-tests
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BASE_IMAGE=localhost:5000/falkordb/falkordb-compiler
+            TARGETPLATFORM=${{ matrix.platform }}
+
+      - name: Upload tests image
+        uses: actions/upload-artifact@v4
+        with:
+          name: falkordb-tests-${{ env.ARCH_SUFFIX }}
+          path: /tmp/falkordb-tests-${{ env.ARCH_SUFFIX }}.tar
+          if-no-files-found: error
+
+      - name: Build base image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: /FalkorDB
+          file: /FalkorDB/build/docker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=docker,dest=/tmp/falkordb-${{ env.ARCH_SUFFIX }}.tar
+          tags: falkordb/falkordb-${{ env.ARCH_SUFFIX }}
+          build-args: |
+            BASE_IMAGE=localhost:5000/falkordb/falkordb-compiler
+            TARGETPLATFORM=${{ matrix.platform }}
+
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: falkordb-${{ env.ARCH_SUFFIX }}
+          path: /tmp/falkordb-${{ env.ARCH_SUFFIX }}.tar
+          if-no-files-found: error
+
+  cleanup-build:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup-runner
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          zone: ${{ vars.GCP_ZONE }}
+          instance_label: build-${{ github.run_id }}-${{ github.run_number }}
+
+  unit-tests:
+    needs: build
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' ||  format('unit-tests-{0}-{1}', github.run_id, github.run_number) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    env:
+      ARCH_SUFFIX: ${{ matrix.platform == 'linux/amd64' && 'x64' || 'arm64v8' }}
+    steps:
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: falkordb-tests-${{ env.ARCH_SUFFIX }}
+          path: /tmp
+
+      - name: Load image
+        id: load_image
+        run: |
+          docker load --input /tmp/falkordb-tests-${{ env.ARCH_SUFFIX }}.tar
+
+      - name: Unit tests
+        run: |
+          docker run -i --rm falkordb/falkordb-tests make CLEAR_LOGS=0 unit-tests
+
+  cleanup-unit-tests:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup-runner
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          zone: ${{ vars.GCP_ZONE }}
+          instance_label: unit-tests-${{ github.run_id }}-${{ github.run_number }}
+
+  flow-tests:
+    needs: build
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' ||  format('flow-tests-{0}-{1}', github.run_id, github.run_number) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    env:
+      ARCH_SUFFIX: ${{ matrix.platform == 'linux/amd64' && 'x64' || 'arm64v8' }}
+    steps:
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: falkordb-tests-${{ env.ARCH_SUFFIX }}
+          path: /tmp
+
+      - name: Load image
+        id: load_image
+        run: |
+          docker load --input /tmp/falkordb-tests-${{ env.ARCH_SUFFIX }}.tar
+
+      - name: Flow tests
+        run: |
+          docker run -i --rm falkordb/falkordb-tests make CLEAR_LOGS=0 PARALLEL=1 flow-tests
+
+  cleanup-flow-tests:
+    needs: flow-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup-runner
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          zone: ${{ vars.GCP_ZONE }}
+          instance_label: flow-tests-${{ github.run_id }}-${{ github.run_number }}
+
+  tck-tests:
+    needs: build
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' ||  format('tck-tests-{0}-{1}', github.run_id, github.run_number) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    env:
+      ARCH_SUFFIX: ${{ matrix.platform == 'linux/amd64' && 'x64' || 'arm64v8' }}
+    steps:
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: falkordb-tests-${{ env.ARCH_SUFFIX }}
+          path: /tmp
+
+      - name: Load image
+        id: load_image
+        run: |
+          docker load --input /tmp/falkordb-tests-${{ env.ARCH_SUFFIX }}.tar
+
+      - name: TCK tests
+        run: |
+          docker run -i --rm falkordb/falkordb-tests make CLEAR_LOGS=0 tck-tests
+
+  cleanup-tck-tests:
+    needs: tck-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup-runner
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          zone: ${{ vars.GCP_ZONE }}
+          instance_label: tck-tests-${{ github.run_id }}-${{ github.run_number }}
+
+  fuzz-tests:
+    needs: build
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' ||  format('fuzz-tests-{0}-{1}', github.run_id, github.run_number) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    env:
+      ARCH_SUFFIX: ${{ matrix.platform == 'linux/amd64' && 'x64' || 'arm64v8' }}
+    steps:
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: falkordb-tests-${{ env.ARCH_SUFFIX }}
+          path: /tmp
+
+      - name: Load image
+        id: load_image
+        run: |
+          docker load --input /tmp/falkordb-tests-${{ env.ARCH_SUFFIX }}.tar
+
+      - name: Fuzz tests
+        run: |
+          docker run -i --rm falkordb/falkordb-tests make fuzz TIMEOUT=180
+
+  cleanup-fuzz-tests:
+    needs: fuzz-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup-runner
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          zone: ${{ vars.GCP_ZONE }}
+          instance_label: fuzz-tests-${{ github.run_id }}-${{ github.run_number }}

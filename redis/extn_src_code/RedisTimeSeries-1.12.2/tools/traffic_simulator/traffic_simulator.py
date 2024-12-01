@@ -1,0 +1,201 @@
+import redis
+import time
+import click
+import multiprocessing
+import sys
+
+ver_1_8_4 = 1
+traffic_sim_version = ver_1_8_4
+
+def send_pipeline(redis_client, cmds):
+    def _exec():
+        pipe = redis_client.pipeline()
+        for cmd in cmds:
+            pipe.execute_command(*cmd)
+        pipe.execute()
+
+    i = 0
+    while i < 10:
+        try:
+            i += 1
+            _exec()
+            break
+        except Exception:
+            continue
+    else:
+        print("Exhausted pipeline executions retry")
+
+
+def worker_func(args):
+    host, port, start_ts, tsrange, pipeline_size, key_index, key_format, check_only, with_compaction, write_version = args
+    redis_client = redis.Redis(host, port, decode_responses=True, retry_on_timeout=True, socket_connect_timeout=30,
+                               socket_timeout=30)
+    if check_only:
+        n_compactions = 13 if write_version >= ver_1_8_4 else 3
+        res = redis_client.execute_command('TS.RANGE', key_format.format(index=key_index), 0, start_ts + tsrange)
+        if len(res) != tsrange:
+            print("# failed!!! key= " + key_format.format(index=key_index) + " len= " + str(len(res)) + " tsrange= " + str(tsrange))
+            return -1
+        expected = [[int(start_ts + i), str(i)] for i in range(tsrange)]
+        if expected != res:
+            print("# failed!!! key= " + key_format.format(index=key_index) + " expected= " + str(expected) + " res= " + str(res))
+            return -1
+        if with_compaction:
+            info = redis_client.execute_command('TS.INFO', key_format.format(index=key_index))
+            response = dict(zip(info[::2], info[1::2]))
+            if not 'rules' in response:
+                print("# failed!!! key= " + key_format.format(index=key_index) + " No rules")
+                return -1
+            if len(response['rules']) != n_compactions:
+                print("# failed!!! key= " + key_format.format(index=key_index) + " Number of rules isn't equal 13, rules = " + str(response['rules']))
+                return -1
+        res = redis_client.execute_command('TS.QUERYINDEX', 'index=' + str(key_index))
+        n_res = 1
+        if with_compaction:
+            n_res += n_compactions
+        if len(res) != n_res:
+            print("# failed!!! key= " + key_format.format(index=key_index) + " Number of series returned by query index is wrong, expected " + str(n_res) + " got " + str(len(res)))
+            return -1
+    else:
+        count = 0
+        cmds = []
+        for i in range(tsrange):
+            if count % pipeline_size == 0:
+                send_pipeline(redis_client, cmds)
+                count = 0
+                cmds = []
+            count += 1
+            cmds.append(("ts.add", key_format.format(index=key_index), start_ts + i, i))
+        send_pipeline(redis_client, cmds)
+    return tsrange
+
+
+def create_compacted_key(redis, i, source, agg, bucket):
+    dest = '%s_%s_%s' % (source, agg, bucket)
+    redis.delete(dest)
+    redis.execute_command('ts.create', dest, 'RETENTION', 0, 'CHUNK_SIZE', 360,
+                          'LABELS', 'index', i, "aggregation", agg, "bucket", bucket)
+    redis.execute_command('ts.createrule', source, dest, 'AGGREGATION', agg, bucket, )
+
+def test_madd(args):
+    host, port, check_only, write_version = args
+    r = redis.Redis(host, port, decode_responses=True, retry_on_timeout=True, socket_connect_timeout=30,
+                               socket_timeout=30)
+    if check_only:
+        if write_version >= ver_1_8_4:
+            # Test '*' functionality
+            res = r.execute_command('ts.range', 'timestampStore{1}', '-', '+')
+            if len(res) != 2:
+                print("# failed!!! timestampStore key has less than 2 samples")
+                return -1
+            first_ts = res[0][1]
+            second_ts = res[1][1]
+            res = r.execute_command('ts.range', 'special{1}', '-', '+')
+            if len(res) != 2:
+                print("# failed!!! special key has less than 2 samples")
+                return -1
+            if int(float(res[0][0])) != int(first_ts) or int(float(res[1][0])) != int(second_ts):
+                print("# failed!!! special key has wrong samples: " + str(res[0][0]) + " " + str(res[1][0]) + " instead of: " + str(first_ts) + " " + str(second_ts))
+                return -1
+            res = r.execute_command('ts.range', 'special2{1}', '-', '+')
+            if len(res) != 1:
+                print("# failed!!! special2 key has n_samples: " + str(len(res)) + " instead of 1")
+                return -1
+            if int(float(res[0][0])) != int(second_ts):
+                print("# failed!!! special2 key has wrong samples: " + str(res[0][0]) + " instead of: " + str(second_ts))
+                return -1
+    else:
+        r.execute_command('ts.add', 'special{1}', '*', 1)
+        res = r.execute_command('ts.get', 'special{1}')
+        r.execute_command('ts.add', 'timestampStore{1}', 1, res[0])
+        time.sleep(2)
+        r.execute_command('ts.madd', 'special{1}', '*', 1, 'special2{1}', '*', 3)
+        res = r.execute_command('ts.get', 'special2{1}')
+        r.execute_command('ts.add', 'timestampStore{1}', 2, res[0])
+    return 0
+
+@click.command()
+@click.option('--host', default="localhost", help='redis host.')
+@click.option('--port', type=click.INT, default=6379, help='redis port.')
+@click.option('--key-count', type=click.INT, default=50, help='Number of Keys.')
+@click.option('--samples', type=click.INT, default=2000, help='Number of samples per key.')
+@click.option('--pool-size', type=click.INT, default=20, help='Number of workers.')
+@click.option('--pipeline-size', type=click.INT, default=100, help='Number of workers.')
+@click.option('--create-keys', type=click.BOOL, default=True, help='Create the keys before inserting')
+@click.option('--with-compaction', type=click.BOOL, default=True, help='Create the compactions keys before inserting')
+@click.option('--start-timestamp', type=click.INT, default=1551347864, help='Base timestamp for all samples')
+@click.option('--key-format', type=click.STRING, default="test{{{index}}}",
+              help='base key format, will be compiled with an index parameter')
+@click.option('--check-only', type=click.BOOL, default=False, help='test if all keys are correcly exists in the database')
+def run(host, port, key_count, samples, pool_size, create_keys, pipeline_size, with_compaction, start_timestamp,
+        key_format, check_only):
+    print("Connecting to the DB")
+    r = redis.Redis(host, port, decode_responses=True, socket_connect_timeout=30)
+    print("from %s to %s" % (start_timestamp, start_timestamp + samples))
+
+    if create_keys and not check_only:
+        for i in range(key_count):
+            p = r.pipeline()
+            keyname = key_format.format(index=i)
+            p.delete(keyname)
+            p.execute_command('ts.create', keyname, 'RETENTION', 0, 'CHUNK_SIZE', 360, 'LABELS', 'index', i)
+            if with_compaction:
+                create_compacted_key(p, i, keyname, 'avg', 10)
+                create_compacted_key(p, i, keyname, 'avg', 60)
+                create_compacted_key(p, i, keyname, 'count', 10)
+                create_compacted_key(p, i, keyname, 'max', 10)
+                create_compacted_key(p, i, keyname, 'min', 10)
+                create_compacted_key(p, i, keyname, 'first', 10)
+                create_compacted_key(p, i, keyname, 'last', 10)
+                create_compacted_key(p, i, keyname, 'sum', 10)
+                create_compacted_key(p, i, keyname, 'range', 10)
+                create_compacted_key(p, i, keyname, 'std.p', 10)
+                create_compacted_key(p, i, keyname, 'std.s', 10)
+                create_compacted_key(p, i, keyname, 'var.s', 10)
+                create_compacted_key(p, i, keyname, 'var.p', 10)
+            p.execute()
+
+        r.execute_command('ts.create', 'special{1}', 'RETENTION', 0, 'CHUNK_SIZE', 360)
+        r.execute_command('ts.create', 'special2{1}', 'RETENTION', 0, 'CHUNK_SIZE', 360)
+        r.execute_command('ts.create', 'timestampStore{1}', 'RETENTION', 0, 'CHUNK_SIZE', 360)
+        r.execute_command('ts.create', 'version_store{1}', 'RETENTION', 0, 'CHUNK_SIZE', 360)
+
+    write_version = 0
+
+    if not check_only:
+        r.execute_command('ts.add', 'version_store{1}', traffic_sim_version, ver_1_8_4)
+    else:
+        res = r.execute_command('EXISTS', 'version_store{1}')
+        if res == 1:
+            res = r.execute_command('ts.range', 'version_store{1}', '-', '+')
+            if len(res) == 1:
+                write_version = int(res[0][0])
+            elif len(res) > 1:
+                print("# failed!!! version_store key has more than 1 sample")
+                return -1
+
+    pool = multiprocessing.Pool(pool_size)
+    s = time.time()
+    result = pool.map(worker_func,
+                      [(host, port, start_timestamp, int(samples), pipeline_size, key_index, key_format, check_only, with_compaction, write_version)
+                       for key_index in range(key_count)])
+    e = time.time()
+    insert_time = e - s
+
+    if(test_madd((host, port, check_only, write_version)) == -1):
+        print("# failed!!! not all items exists in the database")
+        sys.exit(1)
+
+    if check_only:
+        for r in result:
+            if r == -1:
+                print("# failed!!! not all items exists in the database")
+                sys.exit(1)
+        print("# pass, all items exists in the database")
+    else:
+        print("# items inserted %s:" % sum(result))
+        print("took %s to insert sec, average insert time %s" % (insert_time, insert_time * 1000 / sum(result)))
+
+
+if __name__ == '__main__':
+    run()

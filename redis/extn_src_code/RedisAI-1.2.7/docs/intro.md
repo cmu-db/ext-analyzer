@@ -1,0 +1,399 @@
+# Introduction to RedisAI
+
+## What is RedisAI?
+RedisAI is a Redis module for executing Deep Learning/Machine Learning models and managing their data. Its purpose is being a "workhorse" for model serving, by providing out-of-the-box support for popular DL/ML frameworks and unparalleled performance. RedisAI both simplifies the deployment and serving of graphs by leveraging on Redis' production-proven infrastructure, as well as maximizes computation throughput by adhering to the principle of data locality.
+
+This introduction is intended to present the core concepts it uses and the functionality it provides.
+
+!!! important "Prerequisites"
+    Before diving into RedisAI please make sure that you are familiar with the basic concepts of machine learning and Redis.
+
+This video will introduce you to RedisAI at a high level. Give it a watch, then keep reading for more details.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/gbiqF-eyTW4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+In broad strokes, RedisAI's looks as follows:
+
+```
++-----------------------------------------------------------------------------+
+| SERVER                                                                      |
+| +-------------------------------------------------------------------------+ |
+| | REDIS                              +----------+                         | |
+| | +----------+   +-----------------+ | Commands | +---------------------+ | |
+| | | KEYSPACE |   |  REDISAI          +----+-----+                       | | |
+| | |          |   |                        ^                             | | |
+| | +----------+   |  Data Structures       |             DL/ML Backends  | | |
+| | |          |   |  +--------+            |             +-------------+ | | |
+| | | mytensor +----->+ Tensor +<--+        |         +-->+ TensorFlow  | | | |
+| | |          |   |  +--------+   |        |         |   +-------------+ | | |
+| | +----------+   |               |        |         |                 | | | |
+| | |          |   |  +--------+   |        v         |   +-------------+ | | |
+| | | mymodel  +----->+ Model  +---+   +----+-----+   +-->+   PyTorch   | | | |
+| | |          |   |  +--------+   |   |          |   |   +-------------+ | | |
+| | +----------+   |               +-->+  Engine  +<--+                   | | |
+| | |          |   |  +--------+   |   |          |   |   +-------------+ | | |
+| | | myscript +----->+ Script +---+   +----+-----+   +-->+ ONNXRuntime | | | |
+| | |          |   |  +--------+   |        ^         |   +-------------+ | | |
+| | +----------+   |               |        |         |                   | | |
+| |              ^ |  +--------+   |        |         |   +-------------+ | | |
+| |              | |  +  DAG   +---+        |         +-->+     ...     | | | |
+| |              | |  +--------+            |             +-------------+ | | |
+| |              | +------------------------|-----------------------------+ | |
+| +--------------|--------------------------|-------------------------------+ |
+|                v                          v                                 |
+| +--------------+-----------------+   +------------------------------------+ |
+| | RAM                            |   | DEVICES                            | |
+| |                                |   | +-----+  +-----+  +-----+  +-----+ | |
+| | 00101010 00101010 00101010 ... |   | | CPU |  | GPU |  | TPU |  | ... | | |
+| |                                |   | +-----+  +-----+  +-----+  +-----+ | |
+| +--------------------------------+   +------------------------------------+ |
++-----------------------------------------------------------------------------+
+```
+
+### What is Redis?
+**Redis** is an ...
+
+!!! quote "https://redis.io"
+    ... open source (BSD licensed), in-memory data structure store, used as a database, cache and message broker. It supports data structures such as strings, hashes, lists, sets, sorted sets with range queries, bitmaps, hyperloglogs, geospatial indexes with radius queries and streams. Redis has built-in replication, Lua scripting, LRU eviction, transactions and different levels of on-disk persistence, and provides high availability via Redis Sentinel and automatic partitioning with Redis Cluster.
+
+!!! tip "Redis is also..."
+    An acronym for **RE**mote **DI**ctionary **S**erver that's pronounced "red" like the color, then "iss".
+
+??? info "Further reference"
+    More about Redis:
+
+      * [Home page](https://redis.io)
+      * [Interactive tutorial](http://try.redis.io)
+      * [Repository](https://github.com/antirez/redis)
+
+Basically, Redis is many things, but one of the things it is best known for is being a _Key-Value_ server. That means that the data in Redis is represented as keys - unique string identifiers - and their respective values.
+
+For example, this shows the basic use of the native [Redis String data structure](https://redis.io/topics/data-types-intro#redis-strings) using the [`SET`](https://redis.io/commands/set) and [`GET`](https://redis.io/commands/get) commands:
+
+```
+redis> SET mykey somevalue
+OK
+redis> GET mykey
+"somevalue"
+```
+
+### What is a Redis Module?
+A **Redis module** is a shared library that can be loaded by the Redis server during runtime. Modules are useful for extending Redis with new data structures and logic. A Redis module leverages the server's infrastructure. RedisAI is implemented as a module, which allows it direct access to the data managed by the server.
+
+??? info "Further reference"
+    You can learn more about Redis modules at:
+
+      * [Redis Modules API](https://redis.io/documentation#redis-modules-api)
+      * [Modules published at redis.io](https://redis.io/modules)
+
+### Why RedisAI?
+RedisAI bundles together best-of-breed technologies for delivering stable and performant computation graph serving. Every DL/ML framework ships with a runtime for executing the models developed with it, and the common practice for serving these is building a simple server around them.
+
+RedisAI aims to be that server, saving you from the need of installing the backend you're using and developing a server for it. By itself that does not justify RedisAI's existence so there's more to it. Because RedisAI is implemented as a Redis module it automatically benefits from the server's capabilities: be it Redis' native data types, its robust eco-system of clients, high-availability, persistence, clustering, and Enterprise support.
+
+Because Redis is an in-memory data structure server RedisAI uses it for storing all of its data. The main data type supported by RedisAI is the Tensor that is the standard representation of data in the DL/ML domain. Because tensors are stored in the memory space of the Redis server, they are readily accessible to any of RedisAI's backend libraries at minimal latency.
+
+The locality of data, which is tensor data in adjacency to DL/ML models backends, allows RedisAI to provide optimal performance when serving models. It also makes it a perfect choice for deploying DL/ML models in production and allowing them to be used by any application.
+
+Furthermore, RedisAI is also an optimal testbed for models as it allows the parallel execution of multiple computation graphs and, in future versions, assessing their respective performance in real-time.
+
+#### Data Structures
+RedisAI provides the following data structures:
+
+* **Tensor**: represents an n-dimensional array of values
+* **Model**: represents a computation graph by one of the supported DL/ML framework backends
+* **Script**: represents a [TorchScript](https://pytorch.org/docs/stable/jit.html) program
+
+#### DL/ML Backends
+RedisAI supports the following DL/ML identifiers and respective backend libraries:
+
+* **TF**: the TensorFlow backend
+* **TFLITE**: The TensorFlow Lite backend
+* **TORCH**: The PyTorch backend
+* **ONNX**: ONNXRuntime backend
+
+Backend libraries are dynamically loaded as needed, but can also be loaded during booting or at runtime.
+
+??? info "Further reference"
+    Refer to these pages for more information on loading backends:
+
+    * [`AI.CONFIG` command](commands.md#aiconfig)
+    * [Backend configuration](configuration.md#backend)
+
+## Getting Started
+The easiest way to get a standalone Redis server with RedisAI bootstrapped locally is to use the official RedisAI Docker container image (to run on cpu in x64 machine with ubuntu 18 in following example):
+
+```
+docker run -d --name redisai -p 6379:6379 redislabs/redisai:latest-cpu-x64-bionic
+```
+
+??? info "Further reference"
+    For more information on installing RedisAI refer to the [Quickstart page](quickstart.md).
+
+Once the server is up, you can connect to it using any [Redis client](https://redis.io/clients). Better yet, some languages already have client implementations for RedisAI - the list can be found at the [Clients page](clients.md). RedisAI clients wrap the core API and simplify the interaction with the module.
+
+We'll begin by using the official [`redis-cli`](https://redis.io/topics/rediscli) Redis client. If you have it locally installed feel free to use that, but it is also available from the container:
+
+```
+docker exec -it redisai redis-cli
+```
+
+## Using RedisAI Tensors
+A **Tensor** is an n-dimensional array and is the standard representation for data in DL/ML workloads. RedisAI adds to Redis a Tensor data structure that implements the tensor type. Like any datum in Redis, RedisAI's Tensors are identified by key names.
+
+Creating new RedisAI tensors is done with the [`AI.TENSORSET` command](commands.md#aitensorset). For example, consider the tensor: $\begin{equation*} tA = \begin{bmatrix} 2 \\ 3 \end{bmatrix} \end{equation*}$.
+
+We can create the RedisAI Tensor with the key name 'tA' with the following command:
+
+```
+AI.TENSORSET tA FLOAT 2 VALUES 2 3
+```
+
+Copy the command to your cli and hit the `<ENTER>` on your keyboard to execute it. It should look as follows:
+
+!!! example "Example: setting a tensor"
+    ```
+    $ docker exec -it redisai redis-cli
+    127.0.0.1:6379> AI.TENSORSET tA FLOAT 2 VALUES 2 3
+    OK
+    ```
+
+The reply 'OK' means that the operation was successful. We've called the `AI.TENSORSET` command to set the key named 'tA' with the tensor's data, but the name could have been any string value. The `FLOAT` argument specifies the type of values that the tensor stores, and in this case a single-precision floating-point. After the type argument comes the tensor's shape as a list of its dimensions, or just a single dimension of 2.
+
+The `VALUES` argument tells RedisAI that the tensor's data will be given as a sequence of numeric values and in this case the numbers 2 and 3. This is useful for development purposes and creating small tensors, however for practical purposes the `AI.TENSORSET` command also supports importing data in binary format.
+
+The Redis key 'tA' now stores a RedisAI Tensor. We can verify that using standard Redis commands such as [`EXISTS`](https://redis.io/commands/exists) and [`TYPE`](https://redis.io/commands/type):
+
+!!! example "Example: tensor key existence and type"
+
+    ```
+    127.0.0.1:6379> EXISTS tA
+    (integer) 1
+    127.0.0.1:6379> TYPE tA
+    AI_TENSOR
+    ```
+
+Using `AI.TENSORSET` with the same key name, as long as it already stores a RedisAI Tensor, will overwrite the existing data with the new. To delete a RedisAI tensor, use the [Redis `DEL` command](https://redis.io/commands/del).
+
+RedisAI Tensors are used as inputs and outputs in the execution of models and scripts. For reading the data from a RedisAI Tensor value there is the [`AI.TENSORGET` command](commands.md#aitensorget):
+
+!!! example "Example: getting a tensor key"
+
+    ```
+    127.0.0.1:6379> AI.TENSORGET tA META VALUES
+    1) dtype
+    2) FLOAT
+    3) shape
+    4) 1) (integer) 2
+    5) values
+    6) 1) (integer) 2
+       1) (integer) 3
+    ```
+
+## Loading Models
+A **Model** is a Deep Learning or Machine Learning frozen graph that was generated by some framework. The RedisAI Model data structure represents a DL/ML model that is stored in the database and can be run.
+
+Models, like any other Redis and RedisAI data structures, are identified by keys. A Model's key is created using the [`AI.MODELSTORE` command](commands.md#aimodelstore) and requires the graph payload serialized as protobuf for input.
+
+In our examples, we'll use one of the graphs that RedisAI uses in its tests, namely 'graph.pb', which can be downloaded from [here](http://dev.cto.redis.s3.amazonaws.com/RedisAI/test_data/graph.pb). This graph was created using TensorFlow with [this script](http://dev.cto.redis.s3.amazonaws.com/RedisAI/test_data/tf-minimal.py).
+
+??? info "Downloading 'graph.pb'"
+    Use a web browser or the command line to download 'graph.pb':
+
+    ```
+    wget http://dev.cto.redis.s3.amazonaws.com/RedisAI/test_data/graph.pb
+    ```
+
+You can view the computation graph using [Netron](https://lutzroeder.github.io/netron/), which supports all frameworks supported by RedisAI.
+
+![Computation graph visualized in Netron](images/graph.pb.png "Computation Graph Visualized in Netron")
+
+This is a great way to inspect a graph and find out node names for inputs and outputs.
+
+redis-cli doesn't provide a way to read files' contents, so to load the model with it we'll use the command line and output pipes:
+
+```
+cat graph.pb | docker exec -i redisai redis-cli -x \
+               AI.MODELSTORE mymodel TF CPU INPUTS 2 a b OUTPUTS 1 c BLOB
+```
+
+??? example "Example: loading a model from command line"
+    ```
+    $ cat graph.pb | docker exec -i redisai redis-cli -x \
+               AI.MODELSTORE mymodel TF CPU INPUTS 2 a b OUTPUTS 1 c BLOB
+    OK
+    ```
+
+!!! important "Use a client in your language of choice"
+    For practical purposes, you are encouraged to use a programmatic Redis or RedisAI client in the language of your choice for interacting with RedisAI. Refer to the following pages for further information:
+
+    * [Redis clients page](https://redis.io/clients)
+    * [RedisAI clients page](clients.md)
+
+Like most commands, `AI.MODELSTORE`'s first argument is a key's name, which is 'mymodel' in the example. The next two arguments are the model's DL/ML backend and the device it will be executed on. 'graph.pb' in the example is a TensorFlow graph and is denoted by `TF` argument. The model will be executed on the CPU as instructed by the `CPU` argument.
+
+TensorFlow models also require declaring the names of their inputs and outputs. The inputs for 'graph.pb' are called 'a' and 'b', whereas its single output is called 'c'. These names are provided as additional arguments after indicating 'INPUTS' along with the number of inputs to follow, and 'OUTPUTS' along with the number of outputs to follow, respectively.
+
+## Running Models
+Once a RedisAI Model key has been set with `AI.MODELSTORE` it can be run with any Tensor keys from the database as its input. The model's output, after it was executed, is stored in RedisAI Tensors as well.
+
+The model stored at 'mymodel' expects two input tensors so we'll use the previously-create 'tA' and create another input tensor, $\begin{equation*} tB = \begin{bmatrix} 3 \\ 5 \end{bmatrix} \end{equation*}$, with the following command:
+
+```
+AI.TENSORSET tB FLOAT 2 VALUES 3 5
+```
+
+The model can now be run with the [`AI.MODELEXECUTE` command](commands.md#aimodelexecute) as follows:
+
+```
+AI.MODELEXECUTE mymodel INPUTS 2 tA tB OUTPUTS 1 tResult
+```
+
+!!! example "Example: running a model"
+
+    ```
+    127.0.0.1:6379> AI.TENSORSET tA FLOAT 2 VALUES 2 3
+    OK
+    127.0.0.1:6379> AI.TENSORSET tB FLOAT 2 VALUES 3 5
+    OK
+    127.0.0.1:6379> AI.MODELEXECUTE mymodel INPUTS 2 tA tB OUTPUTS 1 tModel
+    OK
+    ```
+
+The first argument to `AI.MODELEXECUTE` is the name of the key at which the RedisAI Model is stored. The names of RedisAI Tensor keys that follow the `INPUTS` and `<input_count>` arguments are used as input for the model. Similarly, following the `OUTPUTS` and `<output_count>`arguments are the key names of RedisAI Tensors that the model outputs.
+
+The inputs for the example are the tensors stored under the 'tA' and 'tB' keys. Once the model's run had finished, a new RedisAI Tensor key called 'tModel' is created and stores the model's output.
+
+!!! example "Example: fetching the model's output"
+
+    ```
+    127.0.0.1:6379> AI.TENSORGET tModel VALUES
+    1) FLOAT
+    2) 1) (integer) 2
+    3) 1) "6"
+       2) "15"
+    ```
+
+The model we've imported from 'graph.pb' takes two input tensors as input and outputs a tensor that is the product of multiplying them. In the case of the example above it looks like this:
+
+$$
+\begin
+{equation*} tModel = tA \times tB =
+\begin{bmatrix}
+2 \\ 3
+\end{bmatrix}
+\times
+\begin{bmatrix}
+3 \\ 5
+\end{bmatrix}
+ =
+\begin{bmatrix}
+2 \times 3  \\ 3 \times 5
+\end{bmatrix}
+ =
+\begin{bmatrix}
+6  \\ 15
+\end{bmatrix}
+\end
+{equation*}
+$$
+
+## Model Management
+The [`AI.MODELGET` command](commands.md#aimodelget) can be used for retrieving information about a model and its serialized blob. The [`AI.INFO` command](commands.md#aiinfo) shows runtime statistics about the model's runs. Lastly, RedisAI Model keys can be deleted with the [`AI.MODELDEL` command](commands.md#aimodeldel).
+
+## Scripting
+RedisAI makes it possible to run [TorchScript](https://pytorch.org/docs/stable/jit.html) with the PyTorch backend. Scripts are useful for performing pre- and post-processing operations on tensors.
+
+The RedisAI Script data structure is managed via a set of dedicated commands, similarly to the models. A RedisAI Script key is:
+
+* Created with the [`AI.SCRIPTSTORE` command](commands.md#aiscriptstore)
+* Run with the [`AI.SCRIPTEXECUTE` command](commands.md#aiscriptexecute)
+* Deleted with the [`AI.SCRIPTDEL` command](commands.md#aiscriptdel)
+
+We can create a RedisAI Script that performs the same computation as the 'graph.pb' model. The script can look like this:
+
+```py
+def multiply(tensors: List[Tensor], keys: List[str], args: List[str]):
+    return tensors[0] * tensors[1]
+```
+
+Assuming that the script is stored in the 'myscript.py' file it can be uploaded via command line and the `AI.SCRIPTSTORE` command as follows:
+
+```
+cat myscript.py | docker exec -i redisai redis-cli -x AI.SCRIPTSTORE myscript CPU ENTRY_POINTS 1 multiply SOURCE
+```
+
+This will store the PyTorch Script from 'myscript.py' under the 'myscript' key and will associate it with the CPU device for execution. Once loaded, a function within the script that was pre-declared as "entry point" ('multiply' in our example) can be run with the following command:
+
+```
+AI.SCRIPTEXECUTE myscript multiply INPUTS 2 tA tB OUTPUTS 1 tScript
+```
+Note that the signature of every entry point function within the script should be as following:
+`def entry_point(tensors: List[Tensor], keys: List[str], args: List[str])`
+The tensors that were stored under the given INPUTS names can be accessed from the `tensors` list (the first argument to the function), according to the inputs order. In the above example, `AI.SCRIPTEXECUTE` command triggers the `multiply` function in the script where `tensors = [tA, tB]`. 
+
+!!! example "Example: running a script"
+
+    ```
+    127.0.0.1:6379> AI.TENSORSET tA FLOAT 2 VALUES 2 3
+    OK
+    127.0.0.1:6379> AI.TENSORSET tB FLOAT 2 VALUES 3 5
+    OK
+    127.0.0.1:6379> AI.SCRIPTEXECUTE myscript multiply INPUTS 2 tA tB OUTPUTS 1 tScript
+    OK
+    127.0.0.1:6379> AI.TENSORGET tScript VALUES
+    1) FLOAT
+    2) 1) (integer) 2
+    3) 1) "6"
+       2) "15"
+    ```
+Moreover, it is possible to run 'native' Redis commands from within a TorchScript in RedisAI, and even executing a model in RedisAI. These capabilities enable RedisAI users to run end-to-end processes with their data. Further details and examples can be found under [`AI.SCRIPTEXECUTE` command](commands.md#aiscriptexecute)  
+
+## Running AI flows via Python plugin
+
+[RedisGears](https://oss.redis.com/redisgears/) module has a built-in integration with RedisAI via a Python plugin that enables the registration of AI flows, and triggering it upon events.
+For example, we can store the following AI flow which sets tensors in Redis and executes `mymodel` over these tensors:
+
+```py
+import redisAI
+
+async def ModelRun(record):
+    tensor_a = redisAI.createTensorFromValues('FLOAT', [2,2], [1.0, 2.0, 3.0, 4.0])
+    tensor_b = redisAI.createTensorFromValues('FLOAT', [2,2], [2.0, 3.0, 2.0, 3.0])
+    redisAI.msetTensorsInKeyspace({'a{1}': tensor_a, 'b{1}': tensor_b})
+
+    # assuming 'mymodel' is a model stored in Redis
+    modelRunner = redisAI.createModelRunner('mymodel')     
+    redisAI.modelRunnerAddInput(modelRunner, 'a', tensor_a)
+    redisAI.modelRunnerAddInput(modelRunner, 'b', tensor_b)
+    redisAI.modelRunnerAddOutput(modelRunner, 'c')
+    
+    # run the model asynchronously in RedisAI
+    res = await redisAI.modelRunnerRunAsync(modelRunner)
+    redisAI.setTensorInKey('c{1}', res[0])
+    return "ModelRun_OK"
+
+GB("CommandReader").map(ModelRun).register(trigger="ModelRun")
+```
+
+Then, you can trigger this execution and get the results by running:
+
+```
+redis> RG.TRIGGER ModelRun
+1)  "ModelRun_OK"
+redis> AI.TENSORGET c{1} VALUES
+1) "2"
+2) "6"
+3) "6"
+4) "12"
+```
+
+The full reference page for the RedisGears-RedisAI-Python integration which also includes setup instructions and more detailed examples, can be found [here](https://oss.redis.com/redisgears/master/redisai.html).  
+
+## Where Next?
+This covers the basics of RedisAI's data structures and capabilities. For more information refer to:
+
+* The [Commands page](commands.md) provides a reference of the RedisAI API
+* The [RedisGears integration](https://oss.redis.com/redisgears/master/redisai.html) page is a reference of the built-in integration of RedisGears with RedisAI.
+* The [Clients page](clients.md) lists RedisAI clients in several programming languages
+* The [Examples page](examples.md) showcases several examples that can be extended

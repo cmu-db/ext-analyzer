@@ -1,0 +1,27 @@
+display_name: RedisBloom
+capability_name: Probabilistic
+author: Redis
+email: redismodules@redis.com
+description: Probabilistic Data Structures for Redis
+homepage: http://redisbloom.io
+license: Redis Source Available License 2.0 (RSALv2) or the Server Side Public License v1 (SSPLv1)
+command_line_args: ""
+compatible_redis_version: "7.4"
+min_redis_version: "7.4"
+min_redis_pack_version: "7.6.0"
+capabilities:
+    - types
+    - no_multi_key
+    - replica_of
+    - eviction_expiry
+    - failover_migrate
+    - backup_restore
+    - reshard_rebalance
+    - persistence_aof
+    - persistence_rdb
+    - hash_policy
+    - clustering
+    - flash
+    - intershard_tls
+    - intershard_tls_pass
+    - ipv6    

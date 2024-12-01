@@ -1,0 +1,15 @@
+sqlite3.h linguist-vendored
+
+src/CDeps/* linguist-vendored
+redisql_lib/src/CDeps/* linguist-vendored
+
+test/correctness/bin/* linguist-vendored
+test/correctness/include/* linguist-vendored
+test/correctness/lib/* linguist-vendored
+test/correctness/local/* linguist-vendored
+
+test/performance/bin/* linguist-vendored
+test/performance/include/* linguist-vendored
+test/performance/lib/* linguist-vendored
+test/performance/local/* linguist-vendored
+

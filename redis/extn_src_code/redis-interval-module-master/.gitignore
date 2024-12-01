@@ -1,0 +1,16 @@
+# Project exclude paths
+/cmake-build-debug/
+**/.idea/**
+CMakeFiles/
+*.so
+*.cmake
+CMakeCache.txt
+Makefile
+*.rdb
+*.cbp
+**/*.log
+tests/logs
+venv
+*.xml
+*.iml
+Testing/**

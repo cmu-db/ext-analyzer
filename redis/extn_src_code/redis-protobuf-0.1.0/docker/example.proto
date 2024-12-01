@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+//package sw.redis.pb;
+
+message SubMsg {
+    string s = 1;
+    int32 i = 2;
+}
+
+message Msg {
+    int32 i = 1;
+    SubMsg sub = 2;
+    repeated int32 arr = 3;
+    map<string, string> m = 4;
+}

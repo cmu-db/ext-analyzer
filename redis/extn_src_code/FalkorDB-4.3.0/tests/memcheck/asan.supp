@@ -1,0 +1,5 @@
+leak:ErrorCtx_Get
+leak:AR_RegisterFuncs
+leak:AlgebraicExpression_FromString
+leak:GB_Global_malloc_function
+leak:_dlerror_run

@@ -1,0 +1,550 @@
+:linkattrs:
+:project-owner:   redis-field-engineering
+:project-name:    redis-smart-cache
+:project-group:   com.redis
+:project-version:    0.3.3
+:project-url:     https://github.com/{project-owner}/{project-name}
+:product-name:    Redis Smart Cache
+:artifact-id:     redis-smart-cache-jdbc
+:property-prefix: smartcache
+:grafana-dir:     samples/redis-smart-cache-demo/grafana
+:imagesdir:       src/media
+:toc:
+:toc-title:
+:toc-placement!:
+
+++++
+<p align="center">
+  <img alt="Redis Smart Cache" src="https://github.com/redis-field-engineering/redis-smart-cache/raw/master/src/media/Redis Smart Cache Github Banner Light.jpg">
+
+  <p align="center">
+    Redis Smart Cache is a JDBC query cache for <a href='https://redis.io/docs/stack/'>Redis Stack</a>, <a href='https://redis.com/redis-enterprise-cloud/overview/'>Redis Cloud</a>, and <a href='https://redis.com/redis-enterprise-software/overview/'>Redis Enterprise</a>.
+  </p>
+</p>
+++++
+
+'''
+
+image:https://github.com/{project-owner}/{project-name}/actions/workflows/early-access.yml/badge.svg["Build Status", link="https://github.com/{project-owner}/{project-name}/actions/workflows/early-access.yml"]
+image:https://img.shields.io/maven-central/v/{project-group}/{artifact-id}[Download, link="https://search.maven.org/#search|ga|1|{artifact-id}"]
+image:https://codecov.io/gh/{project-owner}/{project-name}/branch/master/graph/badge.svg["Coverage", link="https://codecov.io/gh/{project-owner}/{project-name}"]
+
+{product-name} lets you add caching to your application without changing the code.
+
+Implemented as a wrapper around your backend database's JDBC driver, {product-name} can cache
+slow, repeated SQL queries in Redis, bypassing expensive database calls and greatly
+improving response times.
+
+[discrete]
+== Table of Contents
+toc::[]
+
+== Background
+
+Redis is an in-memory data store designed to serve data with the fastest possible response times.
+For this reason, Redis is frequently used for caching.
+
+It's not always easy to modify your code to utilize Redis as a cache.
+You need to think about a number of issues, including:
+
+* Result set serialization and deserialization
+* Fault-tolerance
+* Cache invalidation
+
+This is why we built {product-name}.
+After adding a single dependency and setting some basic configuration, your JDBC application can take advantage of Redis as a cache without any changes to your code.
+
+image:redis-smart-cache-flow.png[]
+
+== Quick start
+
+To understand how {product-name} works, it's best to try it for yourself.
+
+This example showcases an application that continuously performs queries against a MySQL database and uses {product-name} to cache query results.
+
+First, clone this git repository:
+[source,console,subs="verbatim,attributes"]
+----
+git clone {project-url}.git
+cd {project-name}
+----
+
+Next, use Docker Compose to launch containers for MySQL, Grafana, Redis Stack, and a {product-name} example app instance:
+[source,console]
+----
+docker compose up
+----
+
+// tag::demoSteps[]
+Point your web browser to the http://localhost:3000/d/7B6csWTVk/redis-smart-cache?orgId=1&refresh=5s[Redis Smart Cache Grafana dashboard]. This is available through the Grafana instance running at https://localhost:3000.
+
+Initially, no caching rules are active. You can see this in the *Query Mean Latency* metric (~2 s).
+
+image:smart-cache-dashboard-no-caching.png[Dashboard without caching,width=1486]
+
+To add a caching rule, start the Smart Cache CLI by opening a new terminal window and running `demo-cli`.
+
+----
+./demo-cli
+----
+
+Select *List application queries*:
+
+image:cli-view-queries.png[View application queries,width=1486]
+
+Then press *[Enter]* to select a query to cache:
+
+image:cli-select-query.png[Select query,width=1486]
+
+Once the query is displayed, enter a time-to-live (TTL) of 300s:
+
+image:cli-set-ttl.png[Set TTL,width=1486]
+
+To commit the new caching rule, press 'c'. Then follow the prompt to confirm the configuration change.
+
+The application will immediately begin caching queries. You can observe this from the Smart Cache Grafana dashboard:
+
+image:smart-cache-dashboard-with-caching.png[Dashboard with Caching,width=1486]
+
+Important: If the Dashboard is not being populated, check your version of Grafana, earlier versions may have issues. When in doubt, peform a fresh pull of grafana by issuing "docker pull grafana/grafana" prior to bring the application up. Version 9.5.2, while 7.x showed the behavior this note was added for (lack of data on the dashboard). 
+
+// end::demoSteps[]
+
+== Installation
+
+To use {product-name} with an existing application, you'll need to add the {product-name} JDBC driver as an application dependency.
+
+.Maven
+[source,xml,subs="verbatim,attributes"]
+----
+<dependency>
+    <groupId>{project-group}</groupId>
+    <artifactId>{artifact-id}</artifactId>
+    <version>{project-version}</version>
+</dependency>
+----
+
+.Gradle
+[source,groovy,subs="verbatim,attributes"]
+----
+dependencies {
+    implementation '{project-group}:{artifact-id}:{project-version}'
+}
+----
+
+The next step is to configure {product-name}, as described below.
+
+== Usage
+
+First, ensure that your application is using {product-name} as its JDBC driver:
+
+`com.redis.smartcache.Driver`
+
+Next, set your JDBC URI to the URI of your Redis instance prefixed by `jdbc:` for example:
+----
+jdbc:redis://cache.redis.cloud:6379
+----
+
+See https://github.com/lettuce-io/lettuce-core/wiki/Redis-URI-and-connection-details#uri-syntax[Lettuce's URI syntax] for all of the possible URI parameters you can use here.
+
+Next step is providing bootstrap configuration which is done through JDBC properties.
+
+=== Configuration
+
+Refer to the <<property_types>> section below for details on different property types.
+
+==== Application
+
+===== `{property-prefix}.name`
+
+* Type: <<property_type_string>>
+* Default value: `{property-prefix}`
+
+Name used to uniquely identify an application.
+This is the prefix for all Redis keys used by {product-name}, such as cache entries, ruleset configuration, metrics, etc.
+
+NOTE: This property should be the same across all instances of an application.
+
+===== `{property-prefix}.query-cache-capacity`
+
+* Type: <<property_type_integer>>
+* Default value: `10000`
+
+Capacity of the parsed query cache.
+
+==== Driver
+
+===== `{property-prefix}.driver.class-name`
+
+* Type: <<property_type_string>>
+* *Required*
+
+Class name of the backend database JDBC driver, for example `oracle.jdbc.OracleDriver`.
+
+===== `{property-prefix}.driver.url`
+
+* Type: <<property_type_string>>
+* *Required*
+
+JDBC URL for the backend database, for example `jdbc:oracle:thin:@myhost:1521:orcl`.
+
+
+===== Additional properties
+
+You can also include any property your backend JDBC driver requires, like `username` or `password`.
+These will be passed to the backend JDBC driver as is.
+
+==== Redis
+
+To further configure how {product-name} interacts with Redis, set the following properties:
+
+===== `{property-prefix}.redis.key-separator`
+
+* Type: <<property_type_string>>
+* Default value: `:`
+
+Delimiter to use between key elements.
+
+===== `{property-prefix}.redis.cluster`
+
+* Type: <<property_type_boolean>>
+* Default value: `false`
+
+Connect to a Redis Cluster.
+
+===== `{property-prefix}.redis.tls`
+
+* Type: <<property_type_boolean>>
+* Default value: `false`
+
+Establish a secure TLS connection.
+
+===== `{property-prefix}.redis.tls-verify`
+
+* Type: <<property_type_string>>
+* Allowed values: `NONE`, `CA`, `FULL`
+* Default value: `NONE`
+
+TLS verification mode.
+When set to `NONE`, no verification is performed.
+In `CA` mode the Certificate Authority and certificate are verified but not that the hostname matches.
+Use `FULL` mode for full certificate verification.
+
+===== `{property-prefix}.redis.username`
+
+* Type: <<property_type_string>>
+
+Authenticate using the provided username.
+Overrides username in Redis URI.
+Requires password.
+
+===== `{property-prefix}.redis.password`
+
+* Type: <<property_type_string>>
+
+Authenticate using the provided password.
+Overrides password in Redis URI.
+
+===== `{property-prefix}.redis.codec-buffer-capacity`
+
+* Type: <<property_type_data_size>>
+* Default value: `10MB`
+
+Maximum capacity of the buffer used to encode a result set.
+
+==== Metrics
+
+===== `{property-prefix}.metrics.enabled`
+
+* Type: <<property_type_boolean>>
+* Default value: `true`
+
+Enable publishing of metrics.
+
+===== `{property-prefix}.metrics.registry`
+
+* Type: <<property_type_string>>
+* Allowed values: `REDIS`, `SIMPLE`, `JMX`
+* Default value: `REDIS`
+
+Meter registry type. Use `REDIS` for TimeSeries + RediSearch, `SIMPLE` for in-memory, `JMX` for JMX registry.
+
+===== `{property-prefix}.metrics.step`
+
+* Type: <<property_type_duration>>
+* Default value: `60s`
+
+Metrics publishing interval.
+
+[[property_types]]
+==== Property Types
+
+{product-name} configuration properties support different value types.
+
+[[property_type_boolean]]
+===== `boolean`
+
+The properties of type boolean support two values, `true` or `false`.
+
+[[property_type_data_size]]
+===== `data size`
+
+The properties of type data size support values that describe an amount of data, measured in byte-based units.
+These units are incremented in multiples of 1024, so one megabyte is 1024 kilobytes, one kilobyte is 1024 bytes, and so on.
+For example, the value `6MB` describes six megabytes.
+
+The data size type supports the following units:
+
+* B: Bytes
+* kB: Kilobytes
+* MB: Megabytes
+* GB: Gigabytes
+
+[[property_type_duration]]
+===== `duration`
+
+The properties of type duration support values describing an amount of time, using the syntax of a non-negative number followed by a time unit.
+For example, the value `7m` describes seven minutes.
+
+The duration type supports the following units:
+
+* ns: Nanoseconds
+* us: Microseconds
+* ms: Milliseconds
+* s: Seconds
+* m: Minutes
+* h: Hours
+* d: Days
+
+A duration of 0 is treated as zero regardless of the unit that follows.
+For example, 0s and 0m both mean the same thing.
+
+Properties of type duration also support decimal values, such as `2.25d`.
+These are handled as a fractional value of the specified unit.
+For example, the value `1.5m` equals one and a half minutes, or 90 seconds.
+
+[[property_type_integer]]
+===== `integer`
+
+The properties of type integer support whole numeric values, such as `5` and `1000`.
+Negative values are supported as well, for example `-7`.
+Integer type values must be whole numbers, decimal values such as 2.5 are not supported.
+
+Some integer type properties enforce their own minimum and maximum values.
+
+[[property_type_string]]
+===== `string`
+
+The properties of type string support a set of values that consist of a sequence of characters.
+Allowed values are defined on a property-by-property basis, refer to the specific property for its supported and default values.
+
+[[property_type_list]]
+===== `list`
+
+The properties of type list support a set of values consistent with how https://cowtowncoder.medium.com/reading-writing-java-properties-files-using-jackson-2-8-efd7a8da9d4c[Jackson properties] are serialized in an array with `field.position` e.g. if the first rule in the configuration was a tables-any "customers,orders" it would be serialized as something equivalent to:
+
+[source]
+----
+1) 1) "1682625171488-0"
+   2)  1) "rules.1.tables-any.1"
+       2) "customers"
+       3) "rules.1.tables-any.2"
+       4) "orders"
+----
+
+=== Rules
+{product-name} uses rules to determine how SQL queries are cached.
+Rule configuration is stored in a Redis stream located at the key `{property-prefix}:config` and can be modified at runtime.
+{product-name} will dynamically update to reflect configuration messages added to the stream. 
+
+Here is the default rule configuration:
+[source]
+----
+1) 1) "1682622362951-0"
+   2)  1) "rules.1.ttl"
+       2) "0s"
+----
+
+This default configuration contains a single passthrough rule (i.e. it applies to all SQL queries) with a TTL of 0 seconds, which means that no SQL results will be cached.
+
+Rules are processed in order and consist of *criteria* (conditions) and *actions* (results).
+Only the first rule with matching criteria will be considered, and its action applied.
+
+==== Criteria
+
+===== `tables`
+
+* Type: <<property_type_list>>
+* Example:
++
+[source]
+----
+1) 1) "1682625092479-0"
+   2)  1) "rules.1.ttl"
+       2) "50m"
+       3) "rules.1.tables.1"
+       4) "products"
+       5) "rules.1.tables.2"
+       6) "customers"
+       7) "rules.1.tables.3"
+       8) "orders"
+----
+
+Triggers if the given tables are exactly the same as the list in the SQL query (order does not matter).
+
+===== `tablesAny`
+
+* Type: <<property_type_list>>
+* Example:
++
+[source]
+----
+1) 1) "1682625171488-0"
+   2)  1) "rules.1.ttl"
+       2) "50m"
+       3) "rules.1.tables-any.1"
+       4) "products"
+       5) "rules.1.tables-any.2"
+       6) "customers"
+       7) "rules.1.tables-any.3"
+       8) "orders"
+----
+
+Triggers if any of the given tables shows up in the SQL query.
+
+===== `tablesAll`
+
+* Type: <<property_type_list>>
+* Example:
++
+[source]
+----
+1) 1) "1682625239844-0"
+   2)  1) "rules.1.ttl"
+       2) "50m"
+       3) "rules.1.tables-all.1"
+       4) "products"
+       5) "rules.1.tables-all.2"
+       6) "customers"
+       7) "rules.1.tables-all.3"
+       8) "orders"
+----
+
+Triggers if all the given tables show up in the SQL query.
+
+===== `queryIds`
+
+* Type: <<property_type_list>>
+* Example:
++
+[source]
+----
+1) 1) "1682626067029-0"
+   2) 1) "rules.1.ttl"
+      2) "50m"
+      3) "rules.1.query-ids.1"
+      4) "5a934c95"
+      5) "rules.1.query-ids.2"
+      6) "beab0f6f"
+----
+
+Triggers if the SQL query ID matches any of the given IDs.
+
+TIP: An ID is the CRC32 hash of the SQL query. You can use an online CRC32 calculator like https://randommer.io/Hash/CRC32[this one] to compute the ID.
+
+
+===== `regex`
+
+* Type: <<property_type_string>>
+* Example:
++
+[source]
+----
+1) 1) "1682626136637-0"
+   2) 1) "rules.1.ttl"
+      2) "50m"
+      3) "rules.1.regex"
+      4) "SELECT \\* FROM test\\.w*"
+----
+
+Triggers if given regular expression matches the SQL query.
+
+TIP: It is a good idea to test regexes at https://regex101.com[regex101.com].
+
+==== Action
+
+===== `ttl`
+
+* Type: <<property_type_duration>>
+* Default value: `0s`
+* Example:
++
+[source]
+----
+1) 1) "1682626067029-0"
+   2) 1) "rules.1.ttl"
+      2) "50m"
+----
+
+Sets the time-to-live for the corresponding cache entry.
+
+Use `0s` to disable caching.
+
+==== Examples
+
+===== `SELECT * FROM customers c, products p, orders o` 
+[cols="1,1,^1",options="header"]
+|==========================
+|Criteria
+|Value
+|Match
+
+|`tables`
+|`orders, products`
+|image:cross.svg[Check,20]
+
+|`tables`
+|`orders, products, customers`
+|image:check.svg[Check,20]
+
+|`tablesAny`
+|`transactions`
+|image:cross.svg[Check,20]
+
+|`tablesAny`
+|`transactions, orders`
+|image:check.svg[Check,20]
+
+|`tablesAll`
+|`transactions, orders.products`
+|image:cross.svg[Check,20]
+
+|`tablesAll`
+|`orders, products`
+|image:check.svg[Check,20]
+
+|`queryIds`
+|`aaff2b5c, 56789`
+|image:cross.svg[Check,20]
+
+|`queryIds`
+|`a3bb9911, abcd1233`
+|image:check.svg[Check,20]
+
+|`regex`
+|`SELECT .+ FROM trans.*`
+|image:cross.svg[Check,20]
+
+|`regex`
+|`SELECT .+ FROM cust.*`
+|image:check.svg[Check,20]
+|==========================
+
+== Support
+
+{product-name} is supported by Redis, Inc. on a good faith effort basis.
+To report bugs, request features, or receive assistance, please {project-url}/issues[file an issue].
+
+== License
+
+{product-name} is licensed under the MIT License. Copyright (C) 2023 Redis, Inc.

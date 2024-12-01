@@ -1,0 +1,48 @@
+dependencies {
+    implementation project(':redis-smart-cache-core')
+    implementation project(':redis-smart-cache-jdbc')
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation group: 'com.redis', name: 'spring-lettucemod', version: lettucemodVersion
+	implementation group: 'net.datafaker', name: 'datafaker', version: datafakerVersion
+	implementation group: 'me.tongfei', name: 'progressbar', version: progressbarVersion
+	runtimeOnly 'com.mysql:mysql-connector-j'
+	runtimeOnly 'org.postgresql:postgresql'
+	runtimeOnly 'com.oracle.database.jdbc:ojdbc8'
+	runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc'
+	runtimeOnly group: 'com.ibm.db2', name: 'jcc', version: db2Version  
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.bootJar.dependsOn ':redis-smart-cache-jdbc:shadowJar'
+
+bootJar {
+    dependsOn asciidoctor
+    from ("${asciidoctor.outputDir}") { 
+        into 'static'
+    }
+}
+
+asciidoctor {
+    forkOptions {
+      // Fix issue with JDK16+
+      jvmArgs("--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED", "--add-opens", "java.base/java.io=ALL-UNNAMED")
+    }
+    resources {
+    	from("$rootDir/src/media") {
+     		include '**/*'
+   		}
+    }
+    attributes \
+    'icons': 'font',
+    'docinfo1': '',
+    'project-name': project.name,
+    'project-title': config.info.description
+}
+
+config {
+    publishing {
+        enabled = false
+    }
+}

@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: 0.9.0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v1
+
+      - uses: extractions/setup-just@v1
+
+      - run: just test
+
+      # From https://redis.io/docs/getting-started/installation/install-redis-on-linux/
+      - run: |
+          curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+          sudo apt-get update
+          sudo apt-get install -y redis
+
+      - run: just bench
+
+  format_lint:
+    name: Format and Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: 0.9.0
+
+      - run: zig fmt --check .
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v1
+
+      - run: cargo +nightly fmt -- --check
+
+      - run: cargo clippy -- -D warnings
+
+  artifacts:
+    name: Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: 0.9.0
+
+      - uses: extractions/setup-just@v1
+
+      - run: just build-artifacts
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: libredisrope
+          path: zig-out/artifacts

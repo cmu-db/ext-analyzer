@@ -1,0 +1,6 @@
+.vscode
+target/
+*.out
+*.log
+*.pid
+.DS_Store

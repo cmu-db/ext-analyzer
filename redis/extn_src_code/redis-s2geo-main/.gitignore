@@ -1,0 +1,9 @@
+*.o
+*.a
+*.so
+*.db
+.vscode
+build/
+build_linux/
+workflow/
+output/

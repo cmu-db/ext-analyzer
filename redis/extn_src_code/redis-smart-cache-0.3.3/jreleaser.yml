@@ -1,0 +1,116 @@
+project:
+  name: redis-smart-cache
+  description: JDBC query cache for Redis
+  longDescription: |
+    Redis Smart Cache is a JDBC query cache for Redis Stack, Redis Cloud, and 
+    Redis Enterprise. It lets you add caching to your application without changing the code.
+    
+    Implemented as a wrapper around your backend database's JDBC driver, Redis Smart 
+    Cache can cache slow, repeated queries from Redis, bypassing expensive database 
+    calls and greatly improving response times.
+  links:
+    homepage: https://{{repoHost}}/{{repoOwner}}/{{repoName}}
+  authors:
+    - Julien Ruaux
+  license: MIT
+  inceptionYear: '2022'
+  java:
+    groupId: com.redis
+    version: '17'
+    multiProject: true
+  tags:
+    - 'redis'
+    - 'jdbc'
+    - 'cache'
+
+release:
+  github:
+    overwrite: true
+    sign: true
+    changelog:
+      formatted: ALWAYS
+      preset: conventional-commits
+      contributors:
+        enabled: false
+      labelers:
+        - label: 'dependencies'
+          title: 'regex:^(?:deps(?:\(.*\))?!?):\s.*'
+          order: 130
+      categories:
+        - title: 'Merge'
+          labels:
+            - 'merge_pull'
+            - 'merge_branch'
+        - title: '⚙️  Dependencies'
+          key: 'dependencies'
+          order: 80
+          labels:
+            - 'dependencies'
+      hide:
+        categories:
+          - 'Merge'
+        contributors:
+          - 'GitHub'
+          - 'allcontributors'
+      replacers:
+        - search: 'deps: '
+
+signing:
+  active: ALWAYS
+  armored: true
+
+deploy:
+  maven:
+    nexus2:
+      maven-central:
+        active: RELEASE
+        url: https://s01.oss.sonatype.org/service/local
+        snapshotUrl: https://s01.oss.sonatype.org/content/repositories/snapshots
+        closeRepository: true
+        releaseRepository: true
+        stagingRepositories:
+          - build/repos/local/release
+
+announce:
+  slack:
+    active: RELEASE
+    channel: '#field-engineering-announcements'
+    message: '🚀 Redis Smart Cache {{projectVersion}} has been released! {{releaseNotesUrl}}'
+
+distributions:
+  redis-smart-cache-jdbc:
+    artifacts:
+      - path: 'core/{{distributionName}}/build/libs/{{distributionName}}-{{projectVersion}}.jar'
+        transform: '{{distributionName}}/{{distributionName}}-{{projectEffectiveVersion}}.jar'
+  redis-smart-cache-demo:
+    type: SINGLE_JAR
+    artifacts:
+      - path: 'samples/{{distributionName}}/build/libs/{{distributionName}}-{{projectVersion}}.jar'
+        transform: '{{distributionName}}/{{distributionName}}-{{projectEffectiveVersion}}.jar'
+    executable:
+      name: 'redis-smart-cache-demo-launcher'
+    docker:
+      active: ALWAYS
+      repository:
+        active: NEVER
+      registries:
+        - serverName: DEFAULT
+          server: docker.io
+          repositoryName: fieldengineering
+      imageNames:
+        - 'fieldengineering/demo-redis-smart-cache:{{tagName}}'
+        - 'fieldengineering/demo-redis-smart-cache:latest'
+      labels:
+        'org.opencontainers.image.title': 'demo-redis-smart-cache'
+      buildx:
+        enabled: true
+        platforms:
+          - 'linux/amd64'
+          - 'linux/arm64'
+
+files:
+  artifacts:
+    - path: VERSION
+      extraProperties:
+        skipChecksum: 'true'
+        skipSigning: 'true'

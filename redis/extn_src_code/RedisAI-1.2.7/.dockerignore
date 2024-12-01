@@ -1,0 +1,12 @@
+/bin/
+/deps/
+/docs/
+/install*
+/build/
+.venv/
+venv*/
+/[0-9]*/
+*.zip
+*.tgz
+*.tar.gz
+/VARAINT

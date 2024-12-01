@@ -1,0 +1,131 @@
+-- 1.1.1
+	- Update documentation for CF.CAPACITY as it was out of sync with the code.
+	- Bundled a new build of the binaries in the release. Apparently I failed to
+	  include up-to-date binaries in the latest release, leaving surprise bugs 
+	  for unsuspecting users (thanks @shahasim).
+
+-- 1.1.0
+	- Fix bug that made fingerprints 1byte long even when specifying otherwise
+	  (thanks @migolovanov).
+	- Make negative hash/fp finally work as intented: if the value is negative
+	  it gets casted to unsigned and 2complement is applied.
+	  
+-- 1.0.1
+	- Fix parsing of negative hash/fp
+	- Remove `random` attribute to write commands
+		Forgot to do that in the previous release, where insertion became fully 
+		deterministic.
+		
+-- 1.0.0 
+	- Now viable for production
+		With the new features this release can be considered stable enough 
+		for production use.
+
+	- Complete rewrite of the module in Zig
+		Great improvement, nothing much else to say.
+
+	- Now using zig-cuckoofilter as backing library
+		zig-cuckoofilter is a production-ready, sans-io implementation 
+		of Cuckoo Filters written by me. Check it out if you need support
+		for Cuckoo Filters on the client-side. Works with any C ABI compatile
+		target (via both static and dynamic linking) or language (via CFFI).
+
+	- New APIs for humans to help you size the filter
+		Use CF.SIZEFOR and CF.CAPACITY to properly size the filter.
+		No more reading through the documentation to know how to 
+		properly configure your filters!
+
+	- New APIs
+		Check the README for a complete list of available commands.
+
+	- More flexible `hash` and `fp` parsing
+		You can now use both signed and unsigned representations without
+		any worry, as long as you are consistent. All values will be 
+		internally converted to unsigned.
+
+	- Fully deterministic support for insertions
+		Each key saves the state of the PRNG, making the insert history
+		reproducible.
+
+	- Support for Redis Replication
+		With fully deterministic support it was now trivial to add support
+		for Redis replicas. Enjoy your now more resilient Cuckoo filters!
+
+	- Abandoned the idea of supporting resizing
+		Resizing comes at a price and goes against both Redis' and this
+		module's philosophy. This module is for advanced users so you
+		are expected to know how to size a filter properly. If you are in a
+		situation where you prefer dynamic sizing, then it's up to you to
+		orchestrate multiple filters manually (which is the only option
+		and exactly what the library would have done for you). So you 
+		could start with one filter and then add more as more items come
+		in. You will have then to check all filters for presence, thus
+		changing the asymptotic properties of the resulting `MULTICHECK` 
+		operation.
+
+	- Abandoned the idea of supporting filters for multisets
+		Cuckoo Filters are mainly useful because they allow you to delete
+		items and I haven't found a semantically sound way of mixing 
+		deletions with multiset item-counting.
+
+	- Started investigating client-side libraries
+		Given that now the logic is bundled in zig-cuckoofilter and that
+		it can now be used by any C ABI compatible target (checkout the 
+		repo for examples in C, JS, Python and Go), combined with Streams
+		it would be possible to keep a client-side Cuckoo filter synced
+		with one in Redis, allowing clients to keep reads locally and 
+		asyncrhonously sync with Redis to obtain new updates to the filter.
+		
+-- 0.9
+	- Added fingerprint size option to `cf.init`
+		After some reasoning, I concluded that having the user choose
+		fingerprint size is the best choice in terms of API design. 
+		Users care about error rate but it is not possible to have them
+		directly decide it as it is the result of choosing fingerprint size
+		and bucket size, settings that in turn define many other performance
+		characteristics of the filter.
+		Considering Redis' nature and common usage patterns,
+		it's very important to keep the memory layout efficient in terms of 
+		access. This means having a few reasonably useful settings that allow
+		keeping all buckets word or half-word aligned.
+		A fpsize setting seems reasonable considering that users already
+		have to implement a fingerprinting function and should be well aware
+		of how long the fingerprint should be.
+		With this new setting, users can create a filter with 1, 2 or 4 bytes
+		long fingerprints which in turn cap the filter's error rate respectively
+		to 0.03, 0.0001 and 0.000000001.
+		The first error rate (0.03) is the point where Cuckoo filters become 
+		more efficient than Bloom filters, the others follow from doubling the 
+		fingerprint size. 
+		For 1 and 2 fingerprint size, bucket size is 4.
+		For 4, bucketsize is 2.
+		This makes all bucket fetches to be performed in a single word read.
+
+	- Added reference python implementation and testing 
+		Adding variable fingerprint size made the C code much more complex.
+		To keep reasonably well of what the code is supposed to be doing, I
+		wrote a pure python implementation that is both very easy to understand
+		and very slow. 
+		The standard selftest suite has been also adapted to the python code
+		and a "lockstep" testing methodology has devised: each test operation
+		applied to the Redis module is also applied to the python instance and
+		before proceeding to the next, both filters are serialized and confronted
+		to make sure all operations produce byte-by-byte equal results.
+		This test is very slow but ensures a reasonable certainty that the Python
+		and C code behave consistently. This paired with the fact that the Python
+		code is very easy to understand should help build and test new features in
+		the future.
+		
+-- 0.2 
+	- Removed bucket size option from `cf.init`
+		The reasoning being that the option makes more sense once we decide that 
+		we also want to parametrize the fingerprint size as the two options 
+		are intertwined (bigger bucket size <==> longer fingerprints). 1 byte 
+		fingerprints and 4 buckets work well together (cf. the paper) so it's 
+		good enough for now and makes the interface more appealing.
+		This also changed how the filter is saved to disk so the module will 
+		refuse to load 0.1 filters. No backwards compatibility is going to be 
+		implemented until we reach 1.0
+
+-- 0.1
+	- Init

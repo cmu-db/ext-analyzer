@@ -1,0 +1,8 @@
+.*.swp
+*.o
+*.xo
+*.so
+*.a
+*.db
+.vscode
+*.rdb

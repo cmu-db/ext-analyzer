@@ -1,0 +1,33 @@
+[package]
+name = "rediscbor"
+version = "99.99.99"
+authors = ["Michaël Catanzariti"]
+edition = "2021"
+description = "CBOR data type for Redis"
+repository = "https://github.com/RedisCBOR/RedisCBOR"
+readme = "README.md" 
+license-file = "LICENSE"
+keywords = ["redis", "cbor", "plugin"]
+categories = ["database-implementations"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "recbor"
+
+[dev-dependencies]
+serial_test = "1.0"
+env_logger = "0.10"
+cbor-diag = "0.1"
+
+[dependencies]
+libc = "0.2"
+cbor-data = "0.8"
+cborpath = "0.5"
+redis-module = { git = "https://github.com/mcatanzariti/redismodule-rs", features = ["experimental-api"]}
+
+[features]
+# Workaround to allow cfg(feature = "test") in redismodue-rs dependencies:
+# https://github.com/RedisLabsModules/redismodule-rs/pull/68
+# This requires running the tests with `--features test`
+test = ["redis-module/test"]
+as-library = []

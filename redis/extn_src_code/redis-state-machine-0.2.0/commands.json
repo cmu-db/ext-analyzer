@@ -1,0 +1,132 @@
+{
+    "SM.GET": {
+        "summary": "Gets a state machine, or the stored reason for the state transition",
+        "since": "0.1.0",
+        "complexity": "O(N)",
+        "group": "statemachine",
+        "arguments": [
+            {
+                "name": "key",
+                "type": "key"
+            },
+            {
+                "name": "codition",
+                "type": "string",
+                "optional": true,
+                "arguments": [
+                    {
+                        "name": "reason",
+                        "type": "pure-token",
+                        "token": "reason"
+                    }
+                ]
+            }
+
+        ]
+    },
+    "SM.SET": {
+        "summary": "Imports a state machine from a json blob",
+        "since": "0.1.0",
+        "complexity": "O(N)",
+        "group": "statemachine",
+        "arguments": [
+            {
+                "name": "key",
+                "type": "key"
+            },
+            {
+                "name": "value",
+                "type": "string"
+            }
+        ]
+    },
+    "SM.RESET": {
+        "summary": "Resets a state machine to its initial state",
+        "since": "0.1.0",
+        "complexity": "O(N)",
+        "group": "statemachine",
+        "arguments": [
+            {
+                "name": "key",
+                "type": "key"
+            }
+        ]
+    },
+    "SM.STATE": {
+        "summary": "Retrieves the current state machine state",
+        "since": "0.1.0",
+        "complexity": "O(N)",
+        "group": "statemachine",
+        "arguments": [
+            {
+                "name": "key",
+                "type": "key"
+            },
+            {
+                "name": "codition",
+                "type": "string",
+                "optional": true,
+                "arguments": [
+                    {
+                        "name": "list",
+                        "type": "pure-token",
+                        "token": "LIST"
+                    }
+                ]
+            }
+
+        ]
+    },
+    "SM.CREATE": {
+        "summary": "Creates a blank state machine and stores it in the named key",
+        "since": "0.1.0",
+        "complexity": "O(N)",
+        "group": "statemachine",
+        "arity": 2,
+        "arguments": [
+            {
+                "name": "key",
+                "type": "key"
+            }
+        ]
+    },
+    "SM.TEMPLATE": {
+        "summary": "Return the json template used for constructing a state machine",
+        "since": "0.1.0",
+        "complexity": "O(1)",
+        "group": "statemachine",
+        "arity": 1
+    },
+    "SM.MUTATE": {
+        "summary": "Transition the state machine to the specific state",
+        "since": "0.1.0",
+        "complexity": "O(1)",
+        "group": "statemachine",
+        "arguments": [
+            {
+                "name": "key",
+                "type": "key"
+            },
+            {
+                "name": "state",
+                "type": "string"
+            },
+            {
+                "name": "condition",
+                "type": "string",
+                "optional": true,
+                "arguments": [
+                    {
+                        "name": "reason",
+                        "type": "string"
+                    },
+                    {
+                        "name": "force",
+                        "type": "pure-token",
+                        "token": "FORCE"
+                    }
+                ]
+            }
+        ]
+    }
+}

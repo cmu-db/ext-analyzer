@@ -1,0 +1,37 @@
+name: "tsbs-scale100_double-groupby-5"
+
+description: '
+  use case: tsbs devops scale 100 use-case
+  query: double-groupby-5
+  tsbs query detail: Aggregate on across both time and host, giving the average of 5 CPU metrics per host per hour for 24 hours
+  sample query: "TS.MRANGE" "1451634696227" "1451677896227" "AGGREGATION" "AVG" "3600000" "FILTER" "measurement=cpu" "fieldname=(usage_user,usage_system,usage_idle,usage_nice,usage_iowait)" "GROUPBY" "hostname" "REDUCE" "max"
+  '
+
+
+setups:
+  - oss-standalone
+  - oss-cluster-02-primaries
+  - oss-cluster-03-primaries
+  - oss-cluster-05-primaries
+  - oss-cluster-09-primaries
+  - oss-cluster-15-primaries
+  - oss-cluster-30-primaries
+
+dbconfig:
+  - dataset_name: "data_redistimeseries_cpu-only_100"
+  - tool: tsbs_load_redistimeseries
+  - parameters:
+    - file: "https://s3.amazonaws.com/benchmarks.redislabs/redistimeseries/tsbs/datasets/devops/scale100/data_redistimeseries_cpu-only_100.dat"
+  - check:
+      keyspacelen: 1000
+  - module-configuration-parameters:
+      redistimeseries:
+        CHUNK_SIZE_BYTES: 128
+
+clientconfig:
+  - benchmark_type: "read-only"
+  - tool: tsbs_run_queries_redistimeseries
+  - parameters:
+    - workers: 64
+    - max-queries: 1000
+    - file: "https://s3.amazonaws.com/benchmarks.redislabs/redistimeseries/tsbs/queries/devops/scale100/devops-scale100-4days/queries_cpu-only_redistimeseries_100_double-groupby-5_10000.dat"

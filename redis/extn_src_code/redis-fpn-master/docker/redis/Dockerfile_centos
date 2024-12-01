@@ -1,0 +1,34 @@
+
+FROM  centos:7.5.1804
+LABEL maintainer="Artem Labazin <xxlabaza@gmail.com>"
+
+
+ENV REDIS_VERSION=4.0.11 \
+    REDIS_PORT=6379 \
+    REDIS_CONFIG_FILE=/etc/redis.conf \
+    REDIS_LOG_FILE=/var/log/redis/redis.log \
+    REDIS_DATA_DIR=/var/lib/redis/data \
+    REDIS_EXECUTABLE=/usr/local/bin/redis-server \
+    CLI_EXEC=/usr/local/bin/redis-cli
+
+
+RUN yum -y groupinstall 'Development Tools' && \
+    yum -y install tcl wget libgcc && \
+    wget "https://github.com/antirez/redis/archive/${REDIS_VERSION}.tar.gz" -O /redis4.tar.gz && \
+    tar xvzf /redis4.tar.gz && \
+    cd "redis-${REDIS_VERSION}" && \
+    make distclean && \
+    make && \
+    make install && \
+    cd utils && \
+    ./install_server.sh
+
+
+COPY redis.conf /etc/redis.conf
+COPY fpn_module-*.so /fpn_module.so
+
+
+EXPOSE 6379
+
+
+ENTRYPOINT ["/usr/local/bin/redis-server", "/etc/redis.conf", "--loglevel", "verbose"]

@@ -1,0 +1,15 @@
+13072:C 21 Jun 2023 15:47:08.879 # oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+13072:C 21 Jun 2023 15:47:08.879 # Redis version=7.0.4, bits=64, commit=00000000, modified=0, pid=13072, just started
+13072:C 21 Jun 2023 15:47:08.880 # Configuration loaded
+13072:M 21 Jun 2023 15:47:08.880 * Increased maximum number of open files to 10032 (it was originally set to 2560).
+13072:M 21 Jun 2023 15:47:08.880 * monotonic clock: POSIX clock_gettime
+13072:M 21 Jun 2023 15:47:08.883 * Running mode=standalone, port=6379.
+13072:M 21 Jun 2023 15:47:08.884 # WARNING: The TCP backlog setting of 511 cannot be enforced because kern.ipc.somaxconn is set to the lower value of 128.
+13072:M 21 Jun 2023 15:47:08.884 # Server initialized
+13072:M 21 Jun 2023 15:47:08.884 * Module 'FuchiMMap' loaded from fmmap.so
+13072:M 21 Jun 2023 15:47:08.885 * Ready to accept connections
+13072:M 21 Jun 2023 15:47:10.056 # User requested shutdown...
+13072:M 21 Jun 2023 15:47:10.056 * Saving the final RDB snapshot before exiting.
+13072:M 21 Jun 2023 15:47:10.079 * DB saved on disk
+13072:M 21 Jun 2023 15:47:10.079 * Removing the pid file.
+13072:M 21 Jun 2023 15:47:10.079 # Redis is now ready to exit, bye bye...

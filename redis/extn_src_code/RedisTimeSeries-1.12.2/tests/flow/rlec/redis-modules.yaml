@@ -1,0 +1,3 @@
+redistimeseries:
+    path: /opt/view/RedisTimeSeries/bin/artifacts/{{MODULE}}
+    # args:

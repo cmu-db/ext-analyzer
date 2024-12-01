@@ -1,0 +1,15 @@
+[submodule "deps/RedisModulesSDK"]
+	path = deps/RedisModulesSDK
+	url = https://github.com/RedisLabs/RedisModulesSDK.git
+[submodule "deps/readies"]
+	path = deps/readies
+	url = https://github.com/RedisLabsModules/readies.git
+[submodule "deps/fast_double_parser"]
+	path = deps/fast_double_parser
+	url = https://github.com/lemire/fast_double_parser.git
+[submodule "deps/LibMR"]
+	path = deps/LibMR
+	url = https://github.com/RedisGears/LibMR.git
+[submodule "deps/cpu_features"]
+	path = deps/cpu_features
+	url = https://github.com/google/cpu_features.git

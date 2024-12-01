@@ -1,0 +1,16 @@
+[package]
+name = "redisql_lib"
+version = "1.0.0"
+authors = ["Simone Mosciatti <mweb.sim@gmail.com>"]
+edition = "2018"
+
+[build-dependencies]
+bindgen = "0.47.1"
+cc = {version = "1.0.28", features = ["parallel"]}
+
+[dependencies]
+log = "0.4"
+env_logger = "0.6"
+fnv = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

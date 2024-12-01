@@ -1,0 +1,30 @@
+= Spring PetClinic Sample Application
+
+This sample is using the https://github.com/spring-projects/spring-petclinic[Spring Petclinic] application to demonstrate using Redis Smart Cache in a Spring JPA application.
+
+== Run Petclinic locally
+
+1. Build the app
+
+[source,bash]
+----
+git clone https://github.com/redis-field-engineering/redis-smart-cache
+cd redis-smart-cache
+./gradlew :spring-petclinic:build
+----
+
+2. Start the database and Redis services
+
+[source,bash]
+----
+docker compose -f samples/spring-petclinic/docker-compose.yml --profile mysql up
+----
+
+3. Start the app
+
+[source,bash]
+----
+java -jar samples/spring-petclinic/build/libs/*.jar --spring.profiles.active=mysql
+----
+
+You can then access the Petclinic at http://localhost:8080/.

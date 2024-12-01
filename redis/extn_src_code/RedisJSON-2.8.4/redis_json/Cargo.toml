@@ -1,0 +1,36 @@
+[package]
+name = "redis_json"
+version = "2.8.4"
+authors = ["Guy Korland <guy.korland@redis.com>", "Meir Shpilraien <meir@redis.com>", "Omer Shadmi <omer.shadmi@redis.com>"]
+edition.workspace = true
+description = "JSON data type for Redis"
+repository.workspace = true
+readme = "README.md"
+license.workspace = true
+keywords = ["redis", "json", "plugin"]
+categories = ["database-implementations"]
+homepage = "https://redis.io/docs/stack/json/"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "rejson"
+
+[dev-dependencies]
+env_logger = "0.11"
+
+[dependencies]
+bitflags = "2"
+bson.workspace = true
+ijson.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+libc = "0.2"
+redis-module ={ version = "^2.0.7", default-features = false, features = ["min-redis-compatibility-version-7-2"] }
+redis-module-macros = "^2.0.7"
+itertools = "0.13"
+json_path = {path="../json_path"}
+linkme = "0.3"
+
+[features]
+as-library = []
+thread_safe = ["ijson/thread_safe"]

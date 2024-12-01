@@ -1,0 +1,7 @@
+*.rdb
+*.conf
+*.a
+*.so
+*_go.h
+redismodule.h
+*.o

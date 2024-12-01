@@ -1,0 +1,63 @@
+dependencies {
+    implementation project(':redis-smart-cache-core')
+    implementation group: 'com.redis', name: 'lettucemod', version: lettucemodVersion
+    implementation 'io.micrometer:micrometer-core'
+    implementation group: 'io.trino', name: 'trino-parser', version: trinoVersion
+    implementation group: 'io.airlift', name: 'units', version: airliftVersion
+    testImplementation project(':redis-smart-cache-test')
+    testImplementation 'org.awaitility:awaitility'    
+    testImplementation 'org.slf4j:slf4j-jdk14'
+    testImplementation 'org.postgresql:postgresql'
+    testImplementation 'com.oracle.database.jdbc:ojdbc8'
+    testImplementation 'com.mysql:mysql-connector-j'
+    testImplementation 'com.microsoft.sqlserver:mssql-jdbc'
+    testImplementation group: 'com.ibm.db2', name: 'jcc', version: db2Version    
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:oracle-xe'
+    testImplementation 'org.testcontainers:mssqlserver'
+    testImplementation 'org.testcontainers:db2'
+    testImplementation 'org.testcontainers:mysql'
+}
+
+bootJar {
+    enabled = false
+}
+
+jar {
+    archiveClassifier = ''
+}
+
+jar.finalizedBy shadowJar
+
+shadowJar {
+   archiveClassifier = ''
+   enableRelocation = true
+   relocationPrefix = "com.redis.smartcache.shaded"
+}
+
+jmh {
+    fork = 1
+    iterations = 1
+    timeUnit = 'ms'
+    warmup = '1s'
+    warmupForks = 0
+    warmupIterations = 0
+}
+
+jmhJar {
+    exclude('org/slf4j/impl/**')
+}
+
+compileJava {
+    options.release = 8
+}
+
+afterEvaluate {
+    def shadowJar = project.tasks.findByName('shadowJar')
+    def publishTask = project.tasks.findByName('publishMainPublicationToMavenLocal')
+    if (publishTask && shadowJar) publishTask.dependsOn(shadowJar)
+    publishTask = tasks.findByName('publishMainPublicationToLocalSnapshotRepository')
+    if (publishTask && shadowJar) publishTask.dependsOn(shadowJar)
+    publishTask = tasks.findByName('publishMainPublicationToLocalReleaseRepository')
+    if (publishTask && shadowJar) publishTask.dependsOn(shadowJar)
+}

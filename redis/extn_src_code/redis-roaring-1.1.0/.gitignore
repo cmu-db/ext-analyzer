@@ -1,0 +1,13 @@
+*.o
+*.so
+*.aof
+*.rdb
+build/
+.idea/
+Makefile
+core
+vgcore*
+dist/
+cmake-build-debug/
+src/roaring.c
+src/roaring.h

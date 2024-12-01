@@ -1,0 +1,24 @@
+[package]
+name = "rediSQL"
+version = "2.0.0"
+authors = ["Simone Mosciatti <simone@redbeardlab.tech>"]
+edition = "2018"
+
+[lib]
+name = "redis_sql"
+crate-type = ["cdylib"]
+
+[dependencies]
+uuid = { version = "0.7", features = ["v4"] }
+log = {version = "0.4", features = ["release_max_level_warn"]}
+env_logger = "0.6"
+
+redisql_lib = {path = "./redisql_lib"}
+telemetrics = {path = "./telemetrics"}
+sync_engine = {path = "./sync_engine"}
+parser = {path = "./parser"}
+
+[features]
+default = []
+pro = []
+

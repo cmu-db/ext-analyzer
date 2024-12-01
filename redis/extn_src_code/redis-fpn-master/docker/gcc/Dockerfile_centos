@@ -1,0 +1,60 @@
+
+FROM  centos:7.5.1804
+LABEL maintainer="Artem Labazin <xxlabaza@gmail.com>"
+
+
+ENV CMAKE_VERSION=3.10.2
+
+ENV REDIS_VERSION=4.0.11 \
+    REDIS_PORT=6379 \
+    REDIS_CONFIG_FILE=/etc/redis.conf \
+    REDIS_LOG_FILE=/var/log/redis/redis.log \
+    REDIS_DATA_DIR=/var/lib/redis/data \
+    REDIS_EXECUTABLE=/usr/local/bin/redis-server \
+    CLI_EXEC=/usr/local/bin/redis-cli
+
+
+RUN yum install -y epel-release && \
+    yum update -y && \
+    yum install -y \
+    sudo \
+    gcc-c++ \
+    libgcc \
+    make \
+    file \
+    python-pip \
+    python-wheel && \
+    yum upgrade -y python-setuptools && \
+    yum clean all && \
+    rm -rf /var/cache/yum && \
+    curl https://cmake.org/files/v3.10/cmake-${CMAKE_VERSION}-Linux-x86_64.tar.gz | tar -xz && \
+    pip install -q --no-cache-dir conan && \
+    groupadd 1001 -g 1001 && \
+    groupadd 1000 -g 1000 && \
+    groupadd 2000 -g 2000 && \
+    useradd -ms /bin/bash conan -g 1001 -G 1000,2000 && \
+    printf "conan:conan" | chpasswd && \
+    usermod -aG wheel conan && \
+    printf "conan ALL= NOPASSWD: ALL\\n" >> /etc/sudoers \
+    mkdir -p /target
+
+RUN yum -y groupinstall 'Development Tools' && \
+    yum -y install tcl wget libgcc && \
+    wget "https://github.com/antirez/redis/archive/${REDIS_VERSION}.tar.gz" -O /redis4.tar.gz && \
+    tar xvzf /redis4.tar.gz && \
+    cd "redis-${REDIS_VERSION}" && \
+    make distclean && \
+    make && \
+    make install && \
+    cd utils && \
+    ./install_server.sh
+
+
+ENV PATH=$PATH:/cmake-${CMAKE_VERSION}-Linux-x86_64/bin
+
+
+COPY src /src
+COPY Makefile /Makefile
+
+
+ENTRYPOINT ["/usr/bin/make", "build"]

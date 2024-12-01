@@ -1,0 +1,49 @@
+name: "tsbs-scale100-cpu-max-all-8@588rps"
+
+metadata:
+  labels:
+    test_type: query
+    includes_targets: "true"
+
+description: '
+  use case: tsbs devops scale 100 use-case
+  query: cpu-max-all-8
+  tsbs query detail: Aggregate across all CPU metrics per hour over 1 hour for eight hosts
+  sample query: "TS.MRANGE" "1451619133515" "1451647933515" "AGGREGATION" "MAX" "3600000" "FILTER" "measurement=cpu" "hostname=(host_99,host_84,host_23,host_20,host_30,host_47,host_43,host_4)" "GROUPBY" "fieldname" "REDUCE" "max"
+  '
+
+
+
+setups:
+  - oss-cluster-15-primaries
+  - oss-cluster-30-primaries
+
+dbconfig:
+  - dataset_name: "data_redistimeseries_cpu-only_100"
+  - tool: tsbs_load_redistimeseries
+  - parameters:
+    - file: "https://s3.amazonaws.com/benchmarks.redislabs/redistimeseries/tsbs/datasets/devops/scale100/data_redistimeseries_cpu-only_100.dat"
+  - check:
+      keyspacelen: 1000
+  - module-configuration-parameters:
+      redistimeseries:
+        CHUNK_SIZE_BYTES: 128
+
+clientconfig:
+  - benchmark_type: "read-only"
+  - tool: tsbs_run_queries_redistimeseries
+  - parameters:
+    - workers: 32
+    - max-rps: 588
+    - print-interval: 2500
+    - file: "https://s3.amazonaws.com/benchmarks.redislabs/redistimeseries/tsbs/queries/devops/scale100/devops-scale100-4days/queries_cpu-only_redistimeseries_100_cpu-max-all-8_10000.dat"
+
+exporter:
+  redistimeseries:
+    metrics:
+      - "$.Totals.overallQuantiles.all_queries.q50":
+          "target-1": 50.16
+          "target-2": 40.46
+      - "$.Totals.overallQueryRates.all_queries":
+          "target-1": 588
+          "target-2": 588

@@ -1,0 +1,15 @@
+/out/
+build
+.gradle
+.idea
+bin
+.project
+.classpath
+.settings
+.DS_Store
+hs_err_pid*.log
+*.iml
+.vscode
+/README.html
+/spring-shell.log
+tools/redis-smart-cache-cli/spring-shell.log

@@ -1,0 +1,13 @@
+language: c
+compiler: gcc
+dist: trusty
+sudo: required
+install: make clean
+before_script:
+  - git clone -b 4.0.0 --depth 1 https://github.com/antirez/redis.git
+  - cd redis
+  - make
+  - cd ..
+  - sudo pip install redis
+  - ./redis/src/redis-server --loadmodule ./module.so &
+script: make
