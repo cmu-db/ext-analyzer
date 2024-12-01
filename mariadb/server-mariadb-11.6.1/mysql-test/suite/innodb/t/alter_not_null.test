@@ -1,0 +1,7 @@
+# Run with STRICT and NOSCRIPT modes
+--source alter_sql_mode.inc
+
+let $alter_algorithm=COPY;
+--source alter_not_null.inc
+let $alter_algorithm=INPLACE;
+--source alter_not_null.inc

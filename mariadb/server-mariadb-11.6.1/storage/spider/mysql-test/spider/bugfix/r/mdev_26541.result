@@ -1,0 +1,4 @@
+#
+# MDEV-26541 Undefined symbol: _ZTI12ha_partition when attempting to use ha_spider.so in UBSAN builds
+#
+INSTALL SONAME 'ha_spider.so';

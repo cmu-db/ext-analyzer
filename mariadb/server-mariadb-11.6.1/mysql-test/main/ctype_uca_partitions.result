@@ -1,0 +1,126 @@
+SET NAMES utf8;
+CREATE TABLE t1 (c1 VARCHAR(10) CHARACTER SET utf8 COLLATE utf8_thai_520_w2)
+PARTITION BY KEY(c1) PARTITIONS 3;
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `c1` varchar(10) CHARACTER SET utf8mb3 COLLATE utf8mb3_thai_520_w2 DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+ PARTITION BY KEY (`c1`)
+PARTITIONS 3
+INSERT INTO t1 VALUES ('A'),('À'),('Á'),('Â'),('Ã'),('Ä'),('Å');
+INSERT INTO t1 VALUES ('B');
+INSERT INTO t1 VALUES ('C');
+INSERT INTO t1 VALUES ('D');
+INSERT INTO t1 VALUES ('E');
+INSERT INTO t1 VALUES ('F');
+INSERT INTO t1 VALUES ('G');
+INSERT INTO t1 VALUES ('H');
+INSERT INTO t1 VALUES ('I');
+INSERT INTO t1 VALUES ('J');
+INSERT INTO t1 VALUES ('K');
+INSERT INTO t1 VALUES ('L'),('Ĺ'),('Ļ'),('Ľ'),('Ŀ'),('Ł');
+INSERT INTO t1 VALUES ('M');
+INSERT INTO t1 VALUES ('N');
+INSERT INTO t1 VALUES ('O'),('Ò'),('Ó'),('Ô'),('Õ'),('Ö'),('Ø');
+INSERT INTO t1 VALUES ('P');
+INSERT INTO t1 VALUES ('Q');
+INSERT INTO t1 VALUES ('R');
+INSERT INTO t1 VALUES ('S');
+INSERT INTO t1 VALUES ('T');
+INSERT INTO t1 VALUES ('U');
+INSERT INTO t1 VALUES ('V');
+INSERT INTO t1 VALUES ('W');
+INSERT INTO t1 VALUES ('X');
+INSERT INTO t1 VALUES ('Y');
+INSERT INTO t1 VALUES ('Z');
+SELECT * FROM t1 PARTITION (p0) ORDER BY c1;
+c1
+J
+K
+L
+Ĺ
+Ľ
+Ļ
+Ł
+Ŀ
+M
+Q
+R
+T
+V
+X
+SELECT * FROM t1 PARTITION (p1) ORDER BY c1;
+c1
+A
+Á
+À
+Â
+Å
+Ä
+Ã
+D
+E
+F
+G
+I
+N
+S
+U
+W
+Z
+SELECT * FROM t1 PARTITION (p2) ORDER BY c1;
+c1
+B
+C
+H
+O
+Ó
+Ò
+Ô
+Ö
+Õ
+Ø
+P
+Y
+DROP TABLE t1;
+#
+# Start of 10.4 tests
+#
+#
+# MDEV-30072 Wrong ORDER BY for a partitioned prefix key + NOPAD
+#
+SET NAMES utf8mb4;
+CREATE TABLE t1
+(
+id INT,
+data VARCHAR(20),
+KEY data_id (data,id)
+) COLLATE utf8mb3_unicode_nopad_ci ENGINE=MyISAM
+PARTITION BY RANGE COLUMNS (id)
+(
+PARTITION p10 VALUES LESS THAN (20),
+PARTITION p20 VALUES LESS THAN MAXVALUE
+);
+INSERT INTO t1 VALUES (30, 'ss '), (10, 'ß ');
+SELECT id FROM t1 WHERE data='ss ' ORDER BY id;
+id
+10
+30
+SELECT id FROM t1 WHERE data='ss ' ORDER BY id DESC;
+id
+30
+10
+ALTER TABLE t1 DROP KEY data_id, ADD KEY data_id2(data(10),id);
+SELECT id FROM t1 WHERE data='ss ' ORDER BY id;
+id
+10
+30
+SELECT id FROM t1 WHERE data='ss ' ORDER BY id DESC;
+id
+30
+10
+DROP TABLE t1;
+#
+# End of 10.4 tests
+#

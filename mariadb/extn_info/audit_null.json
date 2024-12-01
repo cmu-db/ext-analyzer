@@ -1,0 +1,8 @@
+{
+  "type": "audit",
+  "installable": false,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "audit_null"
+  }
+}

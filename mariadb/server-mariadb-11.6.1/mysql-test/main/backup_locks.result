@@ -1,0 +1,265 @@
+#
+# Test lock taken
+#
+BACKUP LOCK test.t1;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+MDL_SHARED_HIGH_PRIO	Table metadata lock	test	t1
+BACKUP UNLOCK;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+BACKUP LOCK t1;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+MDL_SHARED_HIGH_PRIO	Table metadata lock	test	t1
+BACKUP UNLOCK;
+BACKUP LOCK non_existing.t1;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+MDL_SHARED_HIGH_PRIO	Table metadata lock	non_existing	t1
+BACKUP UNLOCK;
+#
+# Test that backup lock protects against ddl
+#
+connect  con1,localhost,root,,;
+connection default;
+create table t1 (a int) stats_persistent=0,engine=innodb;
+insert into t1 values (1);
+backup lock t1;
+select * from t1;
+a
+1
+connection con1;
+drop table t1;
+connection default;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+MDL_SHARED_HIGH_PRIO	Table metadata lock	test	t1
+MDL_INTENTION_EXCLUSIVE	Schema metadata lock	test	
+select * from t1;
+ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
+backup unlock;
+connection con1;
+connection default;
+#
+# Check that BACKUP LOCK blocks some operations
+#
+create sequence seq1;
+create sequence seq2;
+backup lock seq1;
+connection con1;
+CREATE OR REPLACE SEQUENCE seq1 START -28;
+ERROR HY000: Sequence 'test.seq1' has out of range value for options
+SET STATEMENT max_statement_time=10 FOR CREATE OR REPLACE SEQUENCE seq1 START 50;
+ERROR 70100: Query execution was interrupted (max_statement_time exceeded)
+SET STATEMENT max_statement_time=10 FOR ALTER SEQUENCE IF EXISTS seq1 NOMAXVALUE;
+ERROR 70100: Query execution was interrupted (max_statement_time exceeded)
+SET STATEMENT max_statement_time=10 FOR ALTER SEQUENCE IF EXISTS seq1 MAXVALUE 1000;
+ERROR 70100: Query execution was interrupted (max_statement_time exceeded)
+SET STATEMENT max_statement_time=10 for rename table seq2 to seq3, seq3 to seq1;
+ERROR 70100: Query execution was interrupted (max_statement_time exceeded)
+connection default;
+backup unlock;
+drop table seq1,seq2;
+#
+# BACKUP LOCK and BACKUP UNLOCK are not allowed in procedures.
+#
+CREATE PROCEDURE p_BACKUP_LOCK()
+BEGIN
+BACKUP LOCK;
+END|
+ERROR 0A000: BACKUP LOCK is not allowed in stored procedures
+CREATE PROCEDURE p_BACKUP_UNLOCK()
+BEGIN
+BACKUP UNLOCK;
+END|
+ERROR 0A000: BACKUP UNLOCK is not allowed in stored procedures
+#
+# BACKUP STAGE doesn't work when a BACKUP LOCK is active.
+#
+CREATE TABLE t1 (a INT);
+BACKUP LOCK t1;
+BACKUP STAGE START;
+ERROR HY000: Can't execute the query because you have a conflicting read lock
+BACKUP UNLOCK;
+DROP TABLE t1;
+#
+# FLUSH TABLES WITH READ LOCK is not allowed when BACKUP LOCK is active.
+#
+CREATE TABLE t1 (a INT);
+BACKUP LOCK t1;
+FLUSH TABLES t1 WITH READ LOCK;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+BACKUP UNLOCK;
+BACKUP LOCK t1;
+FLUSH TABLES WITH READ LOCK;
+BACKUP UNLOCK;
+UNLOCK TABLES;
+DROP TABLE t1;
+#
+# MDEV-20945 BACKUP UNLOCK assertion failures.
+#
+# Scenario 1.
+CREATE TABLE t1 (a INT);
+BACKUP LOCK t1;
+FLUSH TABLE t1 WITH READ LOCK;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+UNLOCK TABLES;
+BACKUP UNLOCK;
+DROP TABLE t1;
+# Scenario 2.
+CREATE TABLE t1 (a INT);
+CREATE TABLE t2 (b INT);
+LOCK TABLES t2 AS a2 WRITE;
+BACKUP LOCK t1;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+UNLOCK TABLES;
+INSERT INTO t1 VALUES(0);
+# restart
+DROP TABLE t1;
+DROP TABLE t2;
+# Scenario 3.
+CREATE TEMPORARY TABLE t3 (c INT);
+BACKUP LOCK t1;
+SET @@SESSION.profiling=ON;
+CREATE TABLE t1 (c INT);
+ERROR HY000: Can't execute the query because you have a conflicting read lock
+LOCK TABLES t3 AS a1 READ, t1 AS a3 READ, t3 AS a5 READ LOCAL;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+UNLOCK TABLE;
+# restart
+# Scenario 4.
+CREATE TABLE t (c INT);
+BACKUP LOCK not_existing.t;
+LOCK TABLES t WRITE;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+UNLOCK TABLES;
+# restart
+DROP TABLE t;
+# Scenario 5.
+BACKUP LOCK t1;
+CREATE TABLE t2 (c1 TIME, c2 TIME, c3 DATE, KEY(c1, c2));
+ERROR HY000: Can't execute the query because you have a conflicting read lock
+LOCK TABLE t2 READ;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+# restart
+# Scenario 6.
+BACKUP LOCK t;
+CREATE VIEW v AS SELECT 1;
+ERROR HY000: Can't execute the query because you have a conflicting read lock
+LOCK TABLES v READ;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+START TRANSACTION READ ONLY;
+BACKUP LOCK t;
+# restart
+# Scenario 7.
+SET SQL_MODE='';
+SET STATEMENT max_statement_time=180 FOR BACKUP LOCK test.u;
+CREATE TABLE t (a INT) ENGINE=Aria;
+ERROR HY000: Can't execute the query because you have a conflicting read lock
+CREATE TEMPORARY TABLE IF NOT EXISTS s (c INT) ENGINE=Aria;
+LOCK TABLES s AS a READ LOCAL,t AS b WRITE;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+SET STATEMENT max_statement_time=180 FOR BACKUP LOCK test.u;
+# restart
+#
+connection default;
+disconnect con1;
+show tables;
+Tables_in_test
+#
+#  MDEV-22879 SIGSEGV (or hang) in free/my_free from
+# _ma_end_block_record (on optimized builds)
+#
+SET STATEMENT max_statement_time=20 FOR BACKUP LOCK test.t1;
+CREATE TABLE IF NOT EXISTS t3 (c1 CHAR(1) BINARY,c2 SMALLINT(10),c3 NUMERIC(1,0), PRIMARY KEY(c1(1))) ENGINE=InnoDB;
+ERROR HY000: Can't execute the query because you have a conflicting read lock
+BACKUP UNLOCK;
+CREATE TABLE IF NOT EXISTS t3 (c1 CHAR(1) BINARY,c2 SMALLINT(10),c3 NUMERIC(1,0), PRIMARY KEY(c1(1))) ENGINE=InnoDB;
+SET STATEMENT max_statement_time=20 FOR BACKUP LOCK test.t1;
+LOCK TABLES t3 AS a2 WRITE, t3 AS a1 READ LOCAL;
+ERROR HY000: Can't execute the given command because you have active locked tables or an active transaction
+DROP TABLE t3;
+ERROR HY000: Can't execute the query because you have a conflicting read lock
+BACKUP UNLOCK;
+DROP TABLE t3;
+#
+#  MDEV-28367: BACKUP LOCKS on table to be accessible to those
+#              with database LOCK TABLES privileges
+#
+create database db1;
+create table db1.t1(t int);
+create user user1@localhost;
+select user,host from mysql.user where user='user1';
+User	Host
+user1	localhost
+connect(localhost,user1,,db1,MASTER_PORT,MASTER_SOCKET);
+connect  con1, localhost, user1, ,db1;
+ERROR 42000: Access denied for user 'user1'@'localhost' to database 'db1'
+grant reload on *.* to user1@localhost;
+grant select on db1.* to user1@localhost;
+show grants for user1@localhost;
+Grants for user1@localhost
+GRANT RELOAD ON *.* TO `user1`@`localhost`
+GRANT SELECT ON `db1`.* TO `user1`@`localhost`
+connect  con1, localhost, user1, ,db1;
+BACKUP UNLOCK;
+BACKUP LOCK db1.t1;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+MDL_SHARED_HIGH_PRIO	Table metadata lock	db1	t1
+BACKUP UNLOCK;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+connection default;
+disconnect con1;
+grant lock tables on db1.* to user1@localhost;
+show grants for user1@localhost;
+Grants for user1@localhost
+GRANT RELOAD ON *.* TO `user1`@`localhost`
+GRANT SELECT, LOCK TABLES ON `db1`.* TO `user1`@`localhost`
+connect  con1, localhost, user1, ,db1;
+BACKUP UNLOCK;
+BACKUP LOCK db1.t1;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+MDL_SHARED_HIGH_PRIO	Table metadata lock	db1	t1
+BACKUP UNLOCK;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+connection default;
+disconnect con1;
+revoke reload on *.* from user1@localhost;
+show grants for user1@localhost;
+Grants for user1@localhost
+GRANT USAGE ON *.* TO `user1`@`localhost`
+GRANT SELECT, LOCK TABLES ON `db1`.* TO `user1`@`localhost`
+connect  con1, localhost, user1, ,db1;
+BACKUP UNLOCK;
+ERROR 42000: Access denied; you need (at least one of) the RELOAD, LOCK TABLES privilege(s) for this operation
+BACKUP LOCK db1.t1;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+MDL_SHARED_HIGH_PRIO	Table metadata lock	db1	t1
+BACKUP UNLOCK;
+SELECT LOCK_MODE, LOCK_TYPE, TABLE_SCHEMA, TABLE_NAME FROM information_schema.metadata_lock_info where table_name not like "innodb_%";
+LOCK_MODE	LOCK_TYPE	TABLE_SCHEMA	TABLE_NAME
+connection default;
+disconnect con1;
+revoke lock tables on db1.* from user1@localhost;
+show grants for user1@localhost;
+Grants for user1@localhost
+GRANT USAGE ON *.* TO `user1`@`localhost`
+GRANT SELECT ON `db1`.* TO `user1`@`localhost`
+connect  con1, localhost, user1, ,db1;
+BACKUP LOCK db1.t1;
+ERROR 42000: Access denied; you need (at least one of) the RELOAD, LOCK TABLES privilege(s) for this operation
+BACKUP UNLOCK;
+ERROR 42000: Access denied; you need (at least one of) the RELOAD, LOCK TABLES privilege(s) for this operation
+connection default;
+disconnect con1;
+drop database db1;
+drop user user1@localhost;
+#
+# End of MariaDB 10.4 tests
+#

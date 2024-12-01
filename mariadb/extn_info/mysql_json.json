@@ -1,0 +1,9 @@
+{
+  "type": "type",
+  "so_name": "type_mysql_json",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "type_mysql_json"
+  }
+}

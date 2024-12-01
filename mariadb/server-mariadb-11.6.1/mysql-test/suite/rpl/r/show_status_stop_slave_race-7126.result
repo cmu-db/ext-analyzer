@@ -1,0 +1,8 @@
+include/master-slave.inc
+[connection master]
+connection slave;
+connection slave;
+include/wait_for_slave_to_stop.inc
+include/start_slave.inc
+connection master;
+include/rpl_end.inc

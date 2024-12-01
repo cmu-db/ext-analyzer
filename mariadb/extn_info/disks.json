@@ -1,0 +1,8 @@
+{
+  "type": "information_schema",
+  "installable": false,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "disks"
+  }
+}

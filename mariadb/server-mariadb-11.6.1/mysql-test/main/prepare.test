@@ -1,0 +1,107 @@
+#
+# MDEV-15738 Server crashes in my_strcasecmp_utf8 on query from I_S with UNION
+# executed as PS
+#
+
+PREPARE stmt1 FROM "
+SELECT table_name FROM information_schema.tables
+WHERE table_name = 't1_first'
+UNION ALL
+SELECT table_name FROM information_schema.tables
+WHERE table_name = 't1_second'";
+execute stmt1;
+execute stmt1;
+
+create or replace table t1 (a int primary key, table_name char(40));
+insert into t1 values(1,"t1_first");
+insert into t1 values(2,"t1_second");
+
+PREPARE stmt2 FROM "
+SELECT table_name FROM t1
+WHERE table_name = 't1_first'
+UNION ALL
+SELECT table_name FROM t1
+WHERE table_name = 't1_second'";
+
+execute stmt2;
+execute stmt2;
+flush tables;
+execute stmt2;
+alter table t1 add column b int;
+execute stmt2;
+execute stmt2;
+drop table t1;
+--error ER_NO_SUCH_TABLE
+execute stmt2;
+create or replace table t1 (a int primary key, table_name char(40));
+insert into t1 values(1,"t1_first");
+execute stmt2;
+
+deallocate prepare stmt1;
+deallocate prepare stmt2;
+drop table t1;
+
+--echo #
+--echo # MDEV-25808 PREPARE/EXECUTE makes signed integer out of unsigned
+--echo #
+prepare p1 from 'select concat(?)';
+execute p1 using 17864960750176564435;
+prepare p1 from 'select SQRT(?) is not null';
+execute p1 using 17864960750176564435;
+
+--echo #
+--echo # End of 10.3 tests
+--echo #
+
+--echo #
+--echo # MDEV-17869 AddressSanitizer: use-after-poison in Item_change_list::rollback_item_tree_changes
+--echo #
+create table t1 (pk int, v1 varchar(1));
+insert t1 values (1,'v'),(2,'v'),(3,'c');
+create table t2 (pk int, v1 varchar(1));
+insert t2 values (1,'x');
+create table t3 (pk int, i1 int, v1 varchar(1));
+insert t3 values (10,8,9);
+execute immediate 'select straight_join 1 from (t1 join t2 on (t1.v1 = t2.v1))
+where (3, 6) in (select tc.pk,  t3.i1 from (t3 join t1 as tc on (tc.v1 = t3.v1)) having tc.pk > 1 );';
+drop table t1, t2, t3;
+
+--echo #
+--echo # End of 10.4 tests
+--echo #
+
+--echo #
+--echo # MDEV-9938 Prepared statement return wrong result (missing row)
+--echo #
+
+CREATE TABLE t1 (a_id INT AUTO_INCREMENT PRIMARY KEY, a_text VARCHAR(20));
+CREATE TABLE t2 (b_id INT AUTO_INCREMENT PRIMARY KEY, b_a_id INT);
+
+INSERT INTO t1 VALUES (NULL, 'word1');
+INSERT INTO t2 VALUES (NULL, 1), (NULL, NULL);
+
+PREPARE q FROM 'SELECT * FROM t2
+ LEFT JOIN t1 ON (t1.a_id = t2.b_a_id)
+WHERE ((? IS NULL) OR (t1.a_text = ?))';
+
+SET @var = 'word1';
+--echo expect row count 1
+EXECUTE q USING @var, @var;
+--echo expect row count = 2
+EXECUTE q USING @nul, @nul;
+
+PREPARE q2 FROM 'SELECT * FROM t2
+ LEFT JOIN t1 ON (t1.a_id = t2.b_a_id)
+WHERE ((? IS NULL) OR (t1.a_text = ?))';
+
+--echo expect row count 2
+SET @var = 'word1';
+EXECUTE q2 USING @nul, @nul;
+
+deallocate prepare q;
+deallocate prepare q2;
+drop table t1,t2;
+
+--echo #
+--echo # End of 10.6 tests
+--echo #

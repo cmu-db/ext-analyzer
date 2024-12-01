@@ -1,0 +1,9 @@
+{
+  "type": "information_schema",
+  "so_name": "metadata_lock_info",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "metadata_lock_info"
+  }
+}

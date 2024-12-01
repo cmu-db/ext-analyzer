@@ -1,0 +1,10 @@
+archive
+aria
+blackhole
+connect
+csv
+innodb
+memory
+mroonga
+myisam
+rocksdb

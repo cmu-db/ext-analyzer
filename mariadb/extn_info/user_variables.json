@@ -1,0 +1,9 @@
+{
+  "type": "information_schema",
+  "installation": "default",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "user_variables"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "type": "function",
+  "installable": false,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "func_test"
+  }
+}

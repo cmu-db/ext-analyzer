@@ -1,0 +1,9 @@
+{
+  "type": "authentication",
+  "so_name": "auth_ed25519",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "auth_ed25519"
+  }
+}

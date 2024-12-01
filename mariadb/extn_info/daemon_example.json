@@ -1,0 +1,8 @@
+{
+  "type": "daemon",
+  "installable": false,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "daemon_example"
+  }
+}

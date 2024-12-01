@@ -1,0 +1,37 @@
+-- source include/not_embedded.inc
+
+set sql_mode='ORACLE';
+
+--echo #
+--echo # MDEV-16891 EVENTs created with SQL_MODE=ORACLE fail to execute
+--echo #
+
+SET GLOBAL event_scheduler=off;
+
+SET sql_mode='ORACLE';
+CREATE TABLE t1 (a TIMESTAMP);
+CREATE EVENT e1
+  ON SCHEDULE AT CURRENT_TIMESTAMP + INTERVAL 1 MICROSECOND
+  DO INSERT INTO t1 VALUES(NOW());
+SET GLOBAL event_scheduler=on;
+
+let $wait_timeout = 10;
+let $wait_condition =
+  SELECT COUNT(*) = 0
+  FROM INFORMATION_SCHEMA.EVENTS
+  WHERE event_schema = 'test' AND event_name = 'e1';
+--source include/wait_condition.inc
+
+SELECT COUNT(*) FROM t1;
+DROP TABLE t1;
+
+SET GLOBAL event_scheduler=off;
+
+--echo #
+--echo # MDEV-28588 SIGSEGV in __memmove_avx_unaligned_erms, strmake_root
+--echo #
+CREATE EVENT ev ON SCHEDULE AT CURRENT_TIMESTAMP + INTERVAL 1 HOUR DO BEGIN END;
+--vertical_results
+SELECT EVENT_DEFINITION FROM INFORMATION_SCHEMA.EVENTS WHERE EVENT_SCHEMA='test' AND EVENT_NAME='ev';
+--horizontal_results
+DROP EVENT ev;

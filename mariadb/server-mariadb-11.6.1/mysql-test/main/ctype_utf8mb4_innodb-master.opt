@@ -1,0 +1,2 @@
+--default-storage-engine=MyISAM
+--innodb-stats-persistent=OFF

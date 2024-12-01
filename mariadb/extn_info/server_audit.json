@@ -1,0 +1,9 @@
+{
+  "type": "audit",
+  "so_name": "server_audit",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "server_audit"
+  }
+}

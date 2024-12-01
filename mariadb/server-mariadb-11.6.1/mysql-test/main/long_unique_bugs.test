@@ -1,0 +1,701 @@
+--source include/have_innodb.inc
+--source include/have_partition.inc
+--source include/have_sequence.inc
+
+--echo #
+--echo # MDEV-18707 Server crash in my_hash_sort_bin, ASAN heap-use-after-free in Field::is_null, server hang, corrupted double-linked list
+--echo #
+create table t1 (a int, b int, c int, d int, e int);
+insert into t1 () values
+(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),
+(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),
+(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),
+(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),(),
+(),(),(),();
+--disable_ps2_protocol
+select * into outfile 'load.data' from t1;
+--enable_ps2_protocol
+create temporary table tmp (a varchar(1024), b int, c int, d int, e linestring, unique (e));
+load data infile 'load.data' into table tmp;
+delete from tmp;
+drop table t1;
+--let $datadir= `SELECT @@datadir`
+--remove_file $datadir/test/load.data
+drop table tmp;
+
+--echo #
+--echo # MDEV-18712 InnoDB indexes are inconsistent with what defined in .frm for table after rebuilding table with index on blob
+--echo #
+create table t1 (b blob) engine=innodb;
+alter table t1 add unique (b);
+alter table t1 force;
+show create table t1;
+drop table t1;
+
+--echo #
+--echo # MDEV-18713 Assertion `strcmp(share->unique_file_name,filename) || share->last_version' failed in test_if_reopen upon REPLACE into table with key on blob
+--echo #
+create table t1 (pk int, b blob, primary key(pk), unique(b)) engine=myisam;
+insert into t1 values (1,'foo');
+replace into t1 (pk) values (1);
+alter table t1 force;
+replace into t1 (pk) values (1);
+drop table t1;
+
+--echo #
+--echo # MDEV-18722 Assertion `templ->mysql_null_bit_mask' failed in row_sel_store_mysql_rec upon modifying indexed column into blob
+--echo #
+create table t1 (t time, unique(t)) engine=innodb;
+insert into t1 values (null),(null);
+alter ignore table t1 modify t text not null default '';
+drop table t1;
+
+--echo #
+--echo # MDEV-18720 Assertion `inited==NONE' failed in ha_index_init upon update on versioned table with key on blob
+--echo #
+create table t1 ( pk int, f text, primary key (pk), unique(f)) with system versioning;
+insert into t1 values (1,'foo');
+update t1 set f = 'bar';
+select * from t1;
+update t1 set f = 'foo';
+select * from t1;
+select pk, f, row_end > DATE'2030-01-01' from t1 for system_time all;
+drop table t1;
+
+--echo #
+--echo # MDEV-18747 InnoDB: Failing assertion: table->get_ref_count() == 0 upon dropping temporary table with unique blob
+--echo #
+create temporary table t1 (f blob, unique(f)) engine=innodb;
+insert into t1 values (1);
+replace into t1 values (1);
+drop table t1;
+
+--echo #
+--echo # MDEV-18748 REPLACE doesn't work with unique blobs on MyISAM table
+--echo #
+create table t (b blob, unique(b)) engine=myisam;
+insert into t values ('foo');
+replace into t values ('foo');
+drop table t;
+
+--echo #
+--echo # MDEV-18790 Server crash in fields_in_hash_keyinfo after unsuccessful attempt to drop BLOB with long index
+--echo #
+CREATE TABLE t1 (f INT, x BLOB, UNIQUE (x));
+INSERT INTO t1 VALUES (1,'foo');
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+ALTER TABLE t1 DROP x, ALGORITHM=INPLACE;
+UPDATE t1 SET x = 'bar';
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18799 Long unique does not work after failed alter table
+--echo #
+create table t1(a blob unique , b blob);
+insert into t1 values(1,1),(2,1);
+--error ER_DUP_ENTRY
+alter table t1 add unique(b);
+--query_vertical show keys from t1;
+--error ER_DUP_ENTRY
+insert into t1 values(1,1);
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18792 ASAN unknown-crash in _mi_pack_key upon UPDATE after failed ALTER on a table with long BLOB key
+--echo #
+CREATE TABLE t1 (a TEXT, b INT, UNIQUE(a)) ENGINE=MyISAM;
+--error ER_CANT_DROP_FIELD_OR_KEY
+ALTER TABLE t1 DROP x;
+UPDATE t1 SET b = 0 WHERE a = 'foo';
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18793 Assertion `0' failed in row_sel_convert_mysql_key_to_innobase, ASAN unknown-crash in
+--echo #    row_mysql_store_col_in_innobase_format, warning " InnoDB: Using a partial-field key prefix in search"
+--echo #
+CREATE TABLE t1 (a TEXT, b INT, UNIQUE(a)) ENGINE=InnoDB;
+--error ER_CANT_DROP_FIELD_OR_KEY
+ALTER TABLE t1 DROP x;
+UPDATE t1 SET b = 0 WHERE a = 'foo';
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18795 InnoDB: Failing assertion: field->prefix_len > 0 upon DML on table with BLOB index
+--echo #
+CREATE TEMPORARY TABLE t1 (f BLOB, UNIQUE(f)) ENGINE=InnoDB ROW_FORMAT=COMPACT;
+--error ER_INDEX_COLUMN_TOO_LONG
+ALTER TABLE t1 ADD KEY (f);
+TRUNCATE TABLE t1;
+SELECT * FROM t1 WHERE f LIKE 'foo';
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18798 InnoDB: No matching column for `DB_ROW_HASH_1`and server crash in
+--echo #   ha_innobase::commit_inplace_alter_table upon ALTER on table with UNIQUE key
+--echo #
+CREATE TABLE t1 (a INT, UNIQUE ind USING HASH (a)) ENGINE=InnoDB;
+ALTER TABLE t1 CHANGE COLUMN IF EXISTS b a INT;
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18801 InnoDB: Failing assertion: field->col->mtype == type or ASAN heap-buffer-overflow
+--echo #   in row_sel_convert_mysql_key_to_innobase upon SELECT on table with long index
+--echo #
+CREATE TABLE t1 (f VARCHAR(4096), UNIQUE(f)) ENGINE=InnoDB;
+--error ER_CANT_DROP_FIELD_OR_KEY
+ALTER TABLE t1 DROP x;
+SELECT * FROM t1 WHERE f LIKE 'foo';
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18800 Server crash in instant_alter_column_possible or
+--echo #   Assertion `!pk->has_virtual()' failed in instant_alter_column_possible upon adding key
+--echo #
+CREATE TABLE t1 (pk INT, PRIMARY KEY USING HASH (pk)) ENGINE=InnoDB;
+--query_vertical show keys from t1;
+ALTER TABLE t1 ADD INDEX (pk);
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18922 Alter on long unique varchar column makes result null
+--echo #
+CREATE TABLE t1 (b int, a  varchar(4000));
+INSERT INTO t1 VALUES (1, 2),(2,3),(3,4);
+ALTER TABLE t1 ADD UNIQUE INDEX (a);
+SELECT * FROM t1;
+SELECT a FROM t1;
+drop table t1;
+
+--echo #
+--echo # MDEV-18809 Server crash in fields_in_hash_keyinfo or Assertion `key_info->key_part->field->flags
+--echo # & (1<< 30)' failed in setup_keyinfo_hash
+--echo #
+CREATE TABLE t1 (f VARCHAR(4096), UNIQUE(f)) ENGINE=InnoDB;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+ALTER TABLE t1 DROP KEY f, ADD INDEX idx1(f), ALGORITHM=INSTANT;
+ALTER TABLE t1 ADD KEY idx2(f);
+DROP TABLE t1;
+CREATE TABLE t1(a blob , b blob , unique(a,b));
+--error ER_KEY_COLUMN_DOES_NOT_EXIST
+alter table t1 drop column b;
+insert into t1 values(1,1);
+--error ER_DUP_ENTRY
+insert into t1 values(1,1);
+alter table t1 add column c int;
+drop table t1;
+
+--echo #
+--echo # MDEV-18889 Long unique on virtual fields crashes server
+--echo #
+create table t1(a blob , b blob as (a) unique);
+insert into t1 values(1, default);
+--error ER_DUP_ENTRY
+insert into t1 values(1, default);
+drop table t1;
+
+create table t1(a blob, b blob, c blob as (left(a, 5000)) virtual, d blob as (left(b, 5000)) persistent, unique(a,b(4000)));
+insert into t1(a,b) values(10,11);
+--error ER_DUP_ENTRY
+insert into t1(a,b) values(10,11);
+insert into t1(a,b) values(2,2);
+insert into t1(a,b) values(2,3);
+insert into t1(a,b) values(3,2);
+drop table t1;
+
+--echo #
+--echo # MDEV-18888 Server crashes in Item_field::register_field_in_read_map upon MODIFY COLUMN
+--echo #
+CREATE TABLE t1 ( 
+  a CHAR(128),
+  b CHAR(128) AS (a),
+  c DATETIME,
+  UNIQUE(c,b(64))
+) ENGINE=InnoDB;
+ALTER TABLE t1 MODIFY COLUMN c VARCHAR(4096);
+drop table t1;
+CREATE TABLE t1 (
+  a CHAR(128),
+  b CHAR(128) AS (a),
+  c varchar(5000),
+  UNIQUE(c,b(64))
+) ENGINE=InnoDB;
+drop table t1;
+
+--echo #
+--echo # MDEV-18967 Load data in system version with long unique does not work
+--echo #
+CREATE TABLE t1 (data VARCHAR(4), unique(data) using hash) with system versioning;
+INSERT INTO t1 VALUES ('A');
+--disable_ps2_protocol
+SELECT * INTO OUTFILE 'load.data' from t1;
+--enable_ps2_protocol
+--error ER_DUP_ENTRY
+LOAD DATA INFILE 'load.data'  INTO TABLE t1;
+select * from t1;
+DROP TABLE t1;
+--let $datadir= `select @@datadir`
+--remove_file $datadir/test/load.data
+
+--echo #
+--echo # MDEV-18901 Wrong results after ADD UNIQUE INDEX(blob_column)
+--echo #
+CREATE TABLE t1 (data VARCHAR(7961)) ENGINE=InnoDB;
+
+INSERT INTO t1 VALUES ('f'), ('o'), ('o');
+--disable_ps2_protocol
+SELECT * INTO OUTFILE 'load.data' from t1;
+--enable_ps2_protocol
+
+ALTER IGNORE TABLE t1 ADD UNIQUE INDEX (data);
+SELECT * FROM t1;
+ALTER TABLE t1 ADD SYSTEM VERSIONING ;
+SELECT * FROM t1;
+REPLACE INTO t1 VALUES ('f'), ('o'), ('o');
+SELECT * FROM t1;
+--echo # This should be equivalent to the REPLACE above
+LOAD DATA INFILE 'load.data' REPLACE INTO TABLE t1;
+SELECT * FROM t1;
+DROP TABLE t1;
+--let $datadir= `select @@datadir`
+--remove_file $datadir/test/load.data
+
+--echo #
+--echo # MDEV-18953 Hash index on partial char field not working
+--echo #
+create table t1 (
+ c char(10) character set utf8mb4,
+ unique key a using hash (c(1))
+) engine=myisam;
+show create table t1;
+insert into t1 values ('б');
+--error ER_DUP_ENTRY
+insert into t1 values ('бб');
+--error ER_DUP_ENTRY
+insert into t1 values ('ббб');
+drop table t1;
+
+--echo #
+--echo # MDEV-18904 Assertion `m_part_spec.start_part >= m_part_spec.end_part' failed in ha_partition::index_read_idx_map
+--echo #
+CREATE TABLE t1 (a INT, UNIQUE USING HASH (a)) PARTITION BY HASH (a) PARTITIONS 2;
+INSERT INTO t1 VALUES (2);
+REPLACE INTO t1 VALUES (2);
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-18820 Assertion `lock_table_has(trx, index->table, LOCK_IX)' failed in lock_rec_insert_check_and_lock upon INSERT into table with blob key'
+--echo #
+
+set innodb_lock_wait_timeout= 10;
+
+CREATE TABLE t1 (
+  id int primary key,
+  f INT unique
+) ENGINE=InnoDB;
+
+CREATE TABLE t2 (
+  id int primary key,
+  a blob unique
+) ENGINE=InnoDB;
+
+START TRANSACTION;
+
+--connect (con1,localhost,root,,test)
+
+--connection con1
+set innodb_lock_wait_timeout= 10;
+START TRANSACTION;
+INSERT INTO t1  VALUES (1,1)/*1*/;
+
+--connection default
+INSERT INTO t2 VALUES (2, 1)/*2*/ ;
+
+--connection con1
+--send
+  INSERT INTO t2 VALUES (3, 1)/*3*/;
+
+--connection default
+INSERT IGNORE INTO t1 VALUES (4, 1)/*4*/;
+
+--connection con1
+--error ER_LOCK_DEADLOCK
+--reap
+--disconnect con1
+--connection default
+DROP TABLE t1, t2;
+
+--echo #
+--echo # MDEV-18791 Wrong error upon creating Aria table with long index on BLOB
+--echo #
+--error ER_TOO_LONG_KEY
+CREATE TABLE t1 (a TEXT, UNIQUE(a)) ENGINE=Aria;
+
+--echo #
+--echo # MDEV-20001 Potential dangerous regression: INSERT INTO >=100 rows fail for myisam table with HASH indexes
+--echo #
+create table t1(a int, unique(a) using hash);
+--let $count=150
+--let insert_stmt= insert into t1 values(200)
+while ($count)
+{
+  --let $insert_stmt=$insert_stmt,($count)
+  --dec $count
+}
+--disable_query_log
+--echo #BULK insert > 100 rows (MI_MIN_ROWS_TO_DISABLE_INDEXES)
+--eval $insert_stmt
+--enable_query_log
+drop table t1;
+
+--echo #
+--echo # MDEV-21804 Assertion `marked_for_read()' failed upon INSERT into table with long unique blob under binlog_row_image=NOBLOB
+--echo #
+
+--source include/have_binlog_format_row.inc
+SET binlog_row_image= NOBLOB;
+CREATE TABLE t1 (pk INT PRIMARY KEY, a text ,UNIQUE(a) using hash);
+INSERT INTO t1 VALUES (1,'foo');
+
+create table t2(id int primary key, a blob, b varchar(20) as (LEFT(a,2)));
+INSERT INTO t2 VALUES (1, 'foo', default);
+
+DROP TABLE t1, t2;
+SET binlog_row_image= FULL;
+
+--echo #
+--echo # MDEV-22719 Long unique keys are not created when individual key_part->length < max_key_length but SUM(key_parts->length) > max_key_length
+--echo #
+
+CREATE TABLE t1 (a int, b VARCHAR(1000), UNIQUE (a,b)) ENGINE=MyISAM;
+show index from t1;
+CREATE TABLE t2 (a varchar(900), b VARCHAR(900), UNIQUE (a,b)) ENGINE=MyISAM;
+show index from t2;
+DROP TABLE t1,t2;
+
+--echo #
+--echo # MDEV-26453 Assertion `0' failed in row_upd_sec_index_entry & corruption
+--echo #
+
+--error ER_GENERATED_COLUMN_FUNCTION_IS_NOT_ALLOWED
+CREATE TABLE t (c INT AUTO_INCREMENT KEY, UNIQUE USING HASH(c));
+
+CREATE TABLE t (c INT AUTO_INCREMENT KEY);
+--error ER_GENERATED_COLUMN_FUNCTION_IS_NOT_ALLOWED
+CREATE UNIQUE INDEX i USING HASH ON t (c);
+INSERT INTO t VALUES (0);
+SELECT * FROM t;
+DELETE FROM t;
+
+DROP TABLE t;
+
+--echo #
+--echo # MDEV-28098 incorrect key in "dup value" error after long unique
+--echo #
+create table t1 (v3 int primary key, v2 text(100) unique not null, v1 int unique) engine=innodb;
+insert into t1 values ( -32768 , -128 , 58 ) , ( -1 , 44 , -128 );
+create table t2 (v6 int primary key, v5 text, a int not null) engine=innodb;
+insert into t2 values ( 50 , 61 , -1 ) , ( -2147483648 , -128 , 0 );
+--error ER_DUP_ENTRY
+update t1 set v2 = 1, v3 = -128;
+--error ER_DUP_ENTRY
+update t1,t2 set v1 = v2 , v5 = 0;
+drop table t1, t2;
+
+--echo #
+--echo # MDEV-23264 Unique blobs allow duplicate values upon UPDATE
+--echo #
+
+CREATE TABLE t1 (f TEXT UNIQUE);
+INSERT INTO t1 VALUES (NULL),(NULL);
+--error ER_DUP_ENTRY
+UPDATE t1 SET f = '';
+SELECT * FROM t1;
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-21540 Initialization of already inited long unique index on reorganize partition
+--echo #
+create table t1 (x int, a blob)
+partition by range (x) (
+  partition p1 values less than (50),
+  partition pn values less than maxvalue);
+
+insert into t1 values (1, 1), (100, 1);
+
+# a little bit of additional checks
+--error ER_DUP_ENTRY
+alter table t1 add unique key (a);
+
+update t1 set a= x;
+alter table t1 add unique key (a);
+--error ER_DUP_ENTRY
+update t1 set a= 1;
+update t1 set a= x + 1;
+
+# bug failure
+alter table t1 reorganize partition p1 into (
+  partition n0 values less than (10),
+  partition n1 values less than (50));
+
+drop table t1;
+
+--echo #
+--echo # MDEV-29199 Unique hash key is ignored upon INSERT ... SELECT into non-empty MyISAM table
+--echo #
+create table t1 (a int, b text, unique(b)) engine=MyISAM;
+insert into t1 values (0,'aa');
+--error ER_DUP_ENTRY
+insert into t1 (a,b) select 1,'xxx' from seq_1_to_5;
+select * from t1;
+drop table t1;
+
+--echo #
+--echo # MDEV-22756 SQL Error (1364): Field 'DB_ROW_HASH_1' doesn't have a default value
+--echo #
+create table t1 (f text not null, unique (f));
+insert into t1 (f) select 'f';
+drop table t1;
+
+--echo #
+--echo # MDEV-32012 hash unique corrupts index on virtual blobs
+--echo #
+create table t1 (
+  f1 varchar(25),
+  v1 mediumtext generated always as (concat('f1:', f1)) virtual,
+  unique key (f1) using hash,
+  key (v1(1000))
+) charset=latin1;
+flush status;
+insert ignore t1 (f1) values (9599),(94410);
+# handler_read_next must be 1 below, meaning there was a hash collision above.
+# if a change in the hash function causes these values not to collide anymore,
+# the test must be adjusted to use some other values that collide.
+# to find a collision add an assert into check_duplicate_long_entry_key()
+# and run, like, insert...select * seq_from_1_to_1000000000
+show status like 'handler_read_next';
+--echo # the above MUST BE =1
+check table t1 extended;
+update t1 set f1=100 where f1=9599;
+update t1 set f1=9599 where f1=100;
+check table t1 extended;
+drop table t1;
+
+--echo #
+--echo # MDEV-32015 insert into an empty table fails with hash unique
+--echo #
+create table t1 (f1 varchar(25), unique (f1) using hash);
+insert ignore t1 (f1) values ('new york'),('virginia'),('spouse'),(null),('zqekmqpwutxnzddrbjycyo'),('nebraska'),('illinois'),('qe'),('ekmqpwut'),('arizona'),('arizona');
+check table t1 extended;
+drop table t1;
+
+--echo #
+--echo # End of 10.4 tests
+--echo #
+
+--echo #
+--echo # MDEV-22113 SIGSEGV, ASAN use-after-poison, Assertion `next_insert_id == 0' in handler::ha_external_lock
+--echo #
+create temporary table tmp ( a int, b int, c blob not null, d int, e int default 0, f int, unique key (c)) engine=innodb;
+create table t2 (x int);
+lock table t2 write;
+update tmp set c = 'foo';
+start transaction;
+alter table tmp alter column a set default 8;
+unlock tables;
+drop table t2;
+
+--echo #
+--echo # MDEV-22218 InnoDB: Failing assertion: node->pcur->rel_pos == BTR_PCUR_ON upon LOAD DATA with NO_BACKSLASH_ESCAPES in SQL_MODE and unique blob in table
+--echo #
+create table t1 (pk int primary key, f blob, unique(f)) engine=innodb;
+insert t1 values (1, null);
+--disable_ps2_protocol
+select * into outfile 't1.data' from t1;
+--enable_ps2_protocol
+load data infile 't1.data' replace into table t1;
+select * from t1;
+drop table t1;
+--let $datadir= `SELECT @@datadir`
+--remove_file $datadir/test/t1.data
+
+# more tests:
+
+create table t1 (a int, b blob) engine=myisam;
+insert t1 values (1,'foo'),(2,'bar'), (3, 'bar');
+create table t2 (c int, d blob, unique(d)) engine=myisam;
+
+# INSERT...SELECT
+--error ER_DUP_ENTRY
+insert t2 select * from t1;
+  select * from t2;
+insert ignore t2 select * from t1;
+  select * from t2;
+replace t2 select * from t1;
+  select * from t2;
+
+# multi-UPDATE
+update t1, t2 set t2.d='off' where t1.a=t2.c and t1.b='foo';
+  select * from t2;
+
+# multi-DELETE
+alter table t2 add system versioning;
+delete from t2 using t1, t2 where t1.a=t2.c and t1.b='foo';
+  select * from t2;
+
+# CREATE...SELECT
+--error ER_DUP_ENTRY
+create or replace table t2 (a int, b blob, unique(b)) as select * from t1;
+--error ER_NO_SUCH_TABLE
+  select * from t2;
+create or replace table t2 (a int, b blob, unique(b)) ignore as select * from t1;
+  select * from t2;
+create or replace table t2 (a int, b blob, unique(b)) replace as select * from t1;
+  select * from t2;
+
+drop table if exists t1, t2;
+
+--echo #
+--echo # MDEV-22185 Failing assertion: node->pcur->rel_pos == BTR_PCUR_ON or ER_KEY_NOT_FOUND or Assertion `inited==NONE' failed in handler::ha_index_init
+--echo #
+create table t1 (a int, b int, unique (b) using hash) engine=innodb partition by key (a) partitions 2;
+insert into t1 values (1,10),(2,20);
+update t1 set b = 30 limit 1;
+drop table t1;
+
+--echo #
+--echo # MDEV-32839 LONG UNIQUE gives error when used with REPLACE
+--echo #
+create table t1 (
+  f1 bigint(20) not null auto_increment primary key,
+  f2 varchar(30) default null,
+  f3 varchar(30) default null,
+  f4 varchar(255) default null,
+  f5 varchar(30) default null,
+  f6 varchar(255) default null,
+  f7 varchar(255) default null,
+  unique problem_key (f3,f5,f6,f2,f4,f7) using hash
+) engine=myisam;
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+select * from t1;
+drop table t1;
+
+create table t1 (
+  f1 bigint(20) not null auto_increment primary key,
+  f2 varchar(30) default null,
+  f3 varchar(30) default null,
+  f4 varchar(255) default null,
+  f5 varchar(30) default null,
+  f6 varchar(255) default null,
+  f7 varchar(255) default null,
+  unique problem_key (f3,f5,f6,f2,f4,f7) using hash
+) engine=innodb;
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+select * from t1;
+drop table t1;
+
+create table t1 (
+  f1 bigint(20) not null auto_increment primary key,
+  f2 varchar(30) default null,
+  f3 varchar(30) default null,
+  f4 varchar(255) default null,
+  f5 varchar(30) default null,
+  f6 varchar(255) default null,
+  f7 varchar(255) default null,
+  unique problem_key (f3,f5,f6,f2,f4,f7) using hash
+) engine=myisam partition by key(f1) partitions 2;
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+select * from t1;
+drop table t1;
+
+create table t1 (
+  f1 bigint(20) not null auto_increment primary key,
+  f2 varchar(30) default null,
+  f3 varchar(30) default null,
+  f4 varchar(255) default null,
+  f5 varchar(30) default null,
+  f6 varchar(255) default null,
+  f7 varchar(255) default null,
+  unique problem_key (f3,f5,f6,f2,f4,f7) using hash
+) engine=innodb partition by key(f1) partitions 2;
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'd');
+insert  t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+replace t1 (f2, f3, f4, f5, f6, f7) values ('00004', '0001009089999', '', 'netstes', 'psit', 'e');
+select * from t1;
+drop table t1;
+
+--echo #
+--echo # MDEV-29954 Unique hash key on column prefix is computed incorrectly
+--echo #
+create table t1 (c char(10),unique key a using hash (c(1)));
+insert into t1 values (0);
+check table t1 extended;
+drop table t1;
+
+--echo #
+--echo # MDEV-32837 long unique does not work like unique key when using replace
+--echo #
+
+CREATE TABLE t1 (a INT PRIMARY KEY, b INT, c INT, UNIQUE KEY `test` (b,c) USING HASH) ENGINE=MyISAM;
+INSERT INTO t1 VALUES (1,1,1),(2,2,2);
+REPLACE INTO t1 VALUES (3,1,1);
+SELECT * FROM t1 ORDER BY a;
+REPLACE INTO t1 VALUES (3,2,2);
+SELECT * FROM t1;
+DROP TABLE t1;
+
+--echo # MDEV-30046 wrong row targeted with "insert ... on duplicate" and
+--echo # "replace", leading to data corruption
+--source include/have_innodb.inc
+create table t (s blob, n int, unique (s)) engine=innodb;
+insert into t values ('Hrecvx_0004ln-00',1), ('Hrecvx_0004mm-00',1);
+replace into t values ('Hrecvx_0004mm-00',2);
+select * from t;
+drop table t;
+
+create table t (s blob, n int, unique (s)) engine=innodb;
+insert into t values ('Hrecvx_0004ln-00',1), ('Hrecvx_0004mm-00',1);
+insert into t values ('Hrecvx_0004mm-00',2)
+    on duplicate key update n = values (n);
+select * from t;
+drop table t;
+--echo #
+--echo # MDEV-29345 update case insensitive (large) unique key with insensitive change of value - duplicate key
+--echo #
+create table t1 (a int, b text, unique (b));
+insert ignore t1 values (1, 'a'), (2, 'A');
+select * from t1;
+update t1 set b='A' where a=1;
+select * from t1;
+drop table t1;
+
+create table t1 (a int, b blob, unique (b));
+insert t1 values (1, 'a'), (2, 'A');
+select * from t1;
+--error ER_DUP_ENTRY
+update t1 set b='A' where a=1;
+drop table t1;
+
+--echo #
+--echo # MDEV-25102 UNIQUE USING HASH error after ALTER ... DISABLE KEYS
+--echo #
+create table t1 (i int, unique key (i) using hash);
+alter table t1 disable keys;
+insert into t1 values (1),(2);
+--error ER_DUP_ENTRY
+insert into t1 values (1);
+alter table t1 enable keys;
+--error ER_DUP_ENTRY
+insert into t1 values (2);
+drop table t1;
+
+--echo # End of 10.5 tests

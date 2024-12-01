@@ -1,0 +1,9 @@
+{
+  "type": "daemon",
+  "so_name": "handlersocket",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "handler_socket"
+  }
+}

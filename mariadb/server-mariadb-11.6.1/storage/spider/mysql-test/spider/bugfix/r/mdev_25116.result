@@ -1,0 +1,44 @@
+#
+# MDEV-25116 Spider: IF(COUNT( trigger SQL Error (1054)_ Unknown column '' in field list
+#
+for master_1
+for child2
+child2_1
+child2_2
+child2_3
+for child3
+connection child2_1;
+CREATE DATABASE auto_test_remote;
+USE auto_test_remote;
+CREATE TABLE tbl_a (id INT);
+connection master_1;
+CREATE DATABASE auto_test_local;
+USE auto_test_local;
+CREATE TABLE tbl_a (
+id INT
+) ENGINE=Spider DEFAULT CHARSET=utf8 COMMENT='table "tbl_a", srv "s_2_1"';
+Warnings:
+Warning	138	Spider table params in COMMENT or CONNECTION strings have been deprecated and will be removed in a future release. Please use table options instead.
+connection master_1;
+set @old_spider_direct_aggregate=@@session.spider_direct_aggregate;
+set spider_direct_aggregate=1;
+SHOW STATUS LIKE 'Spider_direct_aggregate';
+Variable_name	Value
+Spider_direct_aggregate	0
+SELECT IF(COUNT(id > 0),'Y','N') FROM tbl_a;
+IF(COUNT(id > 0),'Y','N')
+N
+SHOW STATUS LIKE 'Spider_direct_aggregate';
+Variable_name	Value
+Spider_direct_aggregate	1
+set spider_direct_aggregate=@old_spider_direct_aggregate;
+connection master_1;
+DROP DATABASE IF EXISTS auto_test_local;
+connection child2_1;
+DROP DATABASE IF EXISTS auto_test_remote;
+for master_1
+for child2
+child2_1
+child2_2
+child2_3
+for child3

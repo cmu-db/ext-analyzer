@@ -1,0 +1,75 @@
+--source include/have_innodb.inc
+--source include/innodb_page_size.inc
+--source include/not_embedded.inc
+--source include/have_sequence.inc
+--source include/no_valgrind_without_big.inc
+
+--disable_query_log
+call mtr.add_suppression("InnoDB: Difficult to find free blocks in the buffer pool");
+--disable_query_log
+# This may be triggered on a slow system.
+call mtr.add_suppression("InnoDB: Trying to delete tablespace.*pending operations");
+--enable_query_log
+
+# Re-create the undo log tablespaces after slow shutdown
+SET GLOBAL innodb_fast_shutdown=0;
+let $restart_parameters=--innodb_undo_tablespaces=2;
+--source include/restart_mysqld.inc
+
+SET GLOBAL innodb_undo_log_truncate = 0;
+
+LET $MYSQLD_DATADIR = `select @@datadir`;
+LET $INNODB_PAGE_SIZE = `select @@innodb_page_size`;
+--source suite/innodb/include/show_i_s_tablespaces.inc
+#-----------------------------------------------------------------------------
+#
+# Perform DML action using multiple clients and multiple undo tablespace.
+#
+#
+create table t1(keyc int primary key, c char(100)) engine = innodb;
+create table t2(keyc int primary key, c char(100)) engine = innodb;
+#
+let DATADIR = `select @@datadir`;
+connect (con1,localhost,root,,);
+begin;
+send insert into t1 select seq,'a' from seq_1_to_20000;
+
+connect (con2,localhost,root,,);
+begin;
+send insert into t2 select seq,'a' from seq_1_to_20000;
+
+connection con1; reap; send update t1 set c = 'mysql';
+connection con2; reap; send update t2 set c = 'mysql';
+connection con1; reap; send update t1 set c = 'oracle';
+connection con2; reap; send update t2 set c = 'oracle';
+connection con1; reap; send delete from t1;
+connection con2; reap; delete from t2;
+connection con1; reap;
+
+SET GLOBAL innodb_max_undo_log_size = @@GLOBAL.innodb_page_size * 4294967296;
+SET GLOBAL innodb_undo_log_truncate = 1;
+commit; disconnect con1;
+connection con2; commit; disconnect con2;
+
+connection default;
+
+--replace_regex /.*Trx id counter ([0-9]+).*/\1/
+let $trx_before= `SHOW ENGINE INNODB STATUS`;
+let $trx_before= `select substr('$trx_before',9)+2`;
+
+SET GLOBAL innodb_max_purge_lag_wait=0;
+SET GLOBAL innodb_max_undo_log_size=DEFAULT;
+SET GLOBAL innodb_max_purge_lag_wait=0;
+set global innodb_fast_shutdown=0;
+let $restart_parameters=;
+--source include/restart_mysqld.inc
+--replace_regex /.*Trx id counter ([0-9]+).*/\1/
+let $trx_after= `SHOW ENGINE INNODB STATUS`;
+let $trx_after= `select substr('$trx_after',9)`;
+
+drop table t1, t2;
+
+if ($trx_before > $trx_after)
+{
+  echo Transaction sequence mismatch: $trx_before > $trx_after;
+}

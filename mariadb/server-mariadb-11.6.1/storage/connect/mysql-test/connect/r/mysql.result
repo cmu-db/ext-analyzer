@@ -1,0 +1,380 @@
+CREATE TABLE t1 (a int, b char(10));
+INSERT INTO t1 VALUES (NULL,NULL),(0,'test00'),(1,'test01'),(2,'test02'),(3,'test03');
+SELECT * FROM t1;
+a	b
+NULL	NULL
+0	test00
+1	test01
+2	test02
+3	test03
+#
+# Testing errors
+#
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root1,port=PORT';
+ERROR HY000: (1045) Access denied for user 'root1'@'localhost' (using password: NO)
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL DBNAME='unknown' TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+ERROR HY000: (1049) Unknown database 'unknown'
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL OPTION_LIST='host=localhost,user=root,port=PORT' DBNAME='unknown' TABNAME='t1';
+ERROR HY000: (1049) Unknown database 'unknown'
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='unknown' OPTION_LIST='host=localhost,user=root,port=PORT';
+ERROR HY000: (1146) Table 'test.unknown' doesn't exist [SHOW FULL COLUMNS FROM `unknown` FROM test]
+SHOW CREATE TABLE t2;
+ERROR 42S02: Table 'test.t2' doesn't exist
+CREATE TABLE t2 (x int, y char(10)) ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `x` int(11) DEFAULT NULL,
+  `y` char(10) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`=MYSQL `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+ERROR HY000: Got error 174 '(1054) Unknown column 'x' in 'field list' [SELECT `x`, `y` FROM `t1`]' from CONNECT
+DROP TABLE t2;
+CREATE TABLE t2 (a int, b char(10)) ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+ALTER TABLE t1 RENAME t1backup;
+SELECT * FROM t2;
+ERROR HY000: Got error 174 '(1146) Table 'test.t1' doesn't exist [SELECT `a`, `b` FROM `t1`]' from CONNECT
+ALTER TABLE t1backup RENAME t1;
+DROP TABLE t2;
+#
+# Testing SELECT, etc.
+#
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` int(11) DEFAULT NULL,
+  `b` char(10) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a	b
+NULL	NULL
+0	test00
+1	test01
+2	test02
+3	test03
+DROP TABLE t2;
+CREATE TABLE t2 (a int, b char(10)) ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` int(11) DEFAULT NULL,
+  `b` char(10) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`=MYSQL `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a	b
+NULL	NULL
+0	test00
+1	test01
+2	test02
+3	test03
+DROP TABLE t2;
+CREATE TABLE t2 (a INT NOT NULL, b CHAR(10) NOT NULL) ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` int(11) NOT NULL,
+  `b` char(10) NOT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`=MYSQL `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a	b
+0	
+0	test00
+1	test01
+2	test02
+3	test03
+DROP TABLE t2;
+CREATE TABLE t2 (a char(10), b int) ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` char(10) DEFAULT NULL,
+  `b` int(11) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`=MYSQL `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a	b
+NULL	NULL
+0	0
+1	0
+2	0
+3	0
+DROP TABLE t2;
+DROP TABLE t1;
+#
+# Testing numeric data types
+#
+CREATE TABLE t1 (a smallint);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` smallint(6) DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` smallint(6) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a
+DROP TABLE t2, t1;
+CREATE TABLE t1 (a mediumint);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` mediumint(9) DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` int(9) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a
+DROP TABLE t2, t1;
+CREATE TABLE t1 (a int);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` int(11) DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` int(11) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a
+DROP TABLE t2, t1;
+CREATE TABLE t1 (a bigint);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` bigint(20) DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` bigint(20) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a
+DROP TABLE t2, t1;
+#
+# Testing character data types
+#
+CREATE TABLE t1 (a char(10));
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` char(10) DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` char(10) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a
+DROP TABLE t2, t1;
+CREATE TABLE t1 (a varchar(10));
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` varchar(10) DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` varchar(10) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a
+DROP TABLE t2, t1;
+#
+# Testing binary data types
+#
+#
+# Testing temporal data types
+#
+CREATE TABLE t1 (a date);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `a` date DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` date DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci `TABLE_TYPE`='MYSQL' `TABNAME`='t1' `OPTION_LIST`='host=localhost,user=root,port=PORT'
+SELECT * FROM t2;
+a
+DROP TABLE t2, t1;
+#
+# MDEV-4877 mysqldump dumps all data from a connect table
+#
+CREATE TABLE t1 (a INT);
+INSERT INTO t1 VALUES (10),(20),(30);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL CONNECTION='mysql://root@localhost:PORT/test/t1';
+SELECT * FROM t2;
+a
+10
+20
+30
+# Start of mysqldump ------
+/*M!999999\- enable the sandbox mode */ 
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `t2` (
+  `a` int(11) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci CONNECTION='mysql://root@localhost:PORT/test/t1' `TABLE_TYPE`='MYSQL';
+/*!40101 SET character_set_client = @saved_cs_client */;
+# End of mysqldump ------
+DROP TABLE t2;
+DROP TABLE t1;
+#
+# Testing getting unsigned types
+#
+CREATE TABLE t1 (
+a TINYINT UNSIGNED NOT NULL,
+b SMALLINT ZEROFILL NOT NULL,
+c INT UNSIGNED NOT NULL,
+d BIGINT UNSIGNED NOT NULL,
+e CHAR(32) NOT NULL DEFAULT 'Hello') ENGINE=CONNECT TABLE_TYPE=FIX;
+Warnings:
+Warning	1105	No file name. Table will use t1.fix
+DESCRIBE t1;
+Field	Type	Null	Key	Default	Extra
+a	tinyint(3) unsigned	NO		NULL	
+b	smallint(5) unsigned zerofill	NO		NULL	
+c	int(10) unsigned	NO		NULL	
+d	bigint(20) unsigned	NO		NULL	
+e	char(32)	NO		Hello	
+INSERT INTO t1(a,b,c,d) VALUES(255,65535,4294967295,18446744073709551615);
+SELECT * FROM t1;
+a	b	c	d	e
+255	65535	4294967295	18446744073709551615	Hello
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL TABNAME=t1;
+DESCRIBE t2;
+Field	Type	Null	Key	Default	Extra
+a	tinyint(3) unsigned	NO		NULL	
+b	smallint(5) unsigned zerofill	NO		NULL	
+c	int(10) unsigned	NO		NULL	
+d	bigint(20) unsigned	NO		NULL	
+e	char(32)	NO		Hello	
+SELECT * FROM t2;
+a	b	c	d	e
+255	65535	4294967295	18446744073709551615	Hello
+DROP TABLE t2;
+DROP TABLE t1;
+CREATE TABLE t1 (a INT);
+INSERT INTO t1 VALUES (10),(20),(30);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL CONNECTION='mysql://root@localhost:PORT/test/t1';
+SELECT * FROM t2;
+a
+10
+20
+30
+ALTER TABLE t2 MODIFY a TINYINT;
+SHOW CREATE TABLE t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `a` tinyint(4) DEFAULT NULL
+) ENGINE=CONNECT DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci CONNECTION='mysql://root@localhost:PORT/test/t1' `TABLE_TYPE`='MYSQL'
+SELECT * FROM t2;
+a
+10
+20
+30
+DROP TABLE t2;
+DROP TABLE t1;
+#
+# MDEV-27766 CONNECT Engine Support for INSERT IGNORE with Mysql Table type
+#
+CREATE TABLE t1 (a INT PRIMARY KEY);
+INSERT INTO t1 VALUES (10),(20),(30);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL CONNECTION='mysql://root@localhost:PORT/test/t1' OPTION_LIST="Delayed=1,Ignored=1";
+INSERT INTO t2 VALUES (10),(20),(30),(40);
+DROP TABLE t2;
+DROP TABLE t1;
+#
+# MDEV-28533 CONNECT engine does not quote columns involved in WHERE clause
+#
+CREATE TABLE t1 (id int, `spaced col` varchar(10),`nospace` varchar(10));
+insert into t1 values (1,1,'x1'),(2,'C-003','x2');
+SELECT * from t1;
+id	spaced col	nospace
+1	1	x1
+2	C-003	x2
+CREATE TABLE t2 (id int, `spaced col` varchar(10), `nospace` varchar(10)) ENGINE=CONNECT TABLE_TYPE=MYSQL DBNAME='test' TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+SELECT * from t2;
+id	spaced col	nospace
+1	1	x1
+2	C-003	x2
+SELECT `id` FROM t2 WHERE t2.`nospace` = 'x1';
+id
+1
+SELECT `id` FROM t2 WHERE t2.`spaced col` = 'C-003';
+id
+2
+DROP TABLE t1;
+DROP TABLE t2;
+#
+# MDEV-28489 / MDEV-26722 UTF8 bytes calculated incorrectly
+#
+CREATE TABLE t1 (name varchar(20)) CHARSET=utf8;
+INSERT INTO t1 (name) VALUES ('Иванова'), ('Ivanova');
+CREATE TABLE t2 (name varchar(1)) ENGINE=CONNECT TABLE_TYPE=MYSQL DBNAME='test' TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT' CHARSET=utf8;
+SELECT hex(name) from t1;
+hex(name)
+C390CB9CC390C2B2C390C2B0C390C2BDC390C2BEC390C2B2C390C2B0
+4976616E6F7661
+SELECT hex(name) from t2;
+hex(name)
+C390
+49
+Warnings:
+Warning	1105	Out of range value for column name at row 1
+Warning	1265	Data truncated for column 'name' at row 1
+Warning	1105	Out of range value �? for column 'name' at row 1
+Warning	1105	Out of range value for column name at row 2
+Warning	1265	Data truncated for column 'name' at row 2
+Warning	1105	Out of range value Iva for column 'name' at row 2
+DROP TABLE t2;
+DROP TABLE t1;
+CREATE TABLE t1 (col char(5)) CHARSET=utf8;
+INSERT INTO t1 (col) VALUES ('glace'), ('glacé');
+Warnings:
+Warning	1406	Data too long for column 'col' at row 2
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL DBNAME='test' TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT' CHARSET=utf8;
+SELECT hex(col) from t1;
+hex(col)
+676C616365
+676C6163C383
+SELECT hex(col) from t2;
+hex(col)
+676C616365
+676C6163C383
+DROP TABLE t2;
+DROP TABLE t1;
+#
+# MDEV-29782 CONNECT engine converted YEAR to DATETIME, causing INSERT to fail
+#
+CREATE TABLE t1 (id year);
+CREATE TABLE t2 ENGINE=CONNECT TABLE_TYPE=MYSQL DBNAME='test' TABNAME='t1' OPTION_LIST='host=localhost,user=root,port=PORT';
+INSERT INTO t2 VALUES (1999);
+SELECT * FROM t2;
+id
+1999
+DROP TABLE t2;
+DROP TABLE t1;
+#
+# End of 10.3 tests
+#

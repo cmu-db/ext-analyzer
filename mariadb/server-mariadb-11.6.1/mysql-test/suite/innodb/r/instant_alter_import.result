@@ -1,0 +1,160 @@
+call mtr.add_suppression("Operating system error number .* in a file operation.");
+call mtr.add_suppression("The error means the system cannot find the path specified.");
+call mtr.add_suppression("File ./test/t1.ibd was not found");
+set default_storage_engine=innodb;
+#
+# MDEV-18295 IMPORT TABLESPACE fails with instant-altered tables
+#
+create table t2 (x int, z int default 41);
+alter table t2 discard tablespace;
+create table t1 (x int);
+insert into t1 values (1);
+alter table t1 add z int default 42, algorithm instant;
+select * from t1;
+x	z
+1	42
+flush tables t1 for export;
+unlock tables;
+# The metadata has to be updated to instant ADD COLUMN.
+alter table t2 import tablespace;
+select * from t2;
+x	z
+1	42
+insert into t2 set x=2;
+select * from t2;
+x	z
+1	42
+2	41
+alter table t1 discard tablespace;
+flush tables t2 for export;
+unlock tables;
+# Both the metadata and the data file used instant ADD COLUMN.
+alter table t1 import tablespace;
+select * from t1;
+x	z
+1	42
+2	41
+drop table t2;
+create table t2 select * from t1;
+alter table t1 discard tablespace;
+flush tables t2 for export;
+unlock tables;
+# The instant ADD COLUMN has to be removed from the metadata.
+alter table t1 import tablespace;
+select * from t1;
+x	z
+1	42
+2	41
+# Remove metadata for instant DROP COLUMN, then import
+alter table t1 drop x, add column x int first, algorithm instant;
+select * from t1;
+x	z
+NULL	42
+NULL	41
+alter table t1 discard tablespace;
+alter table t1 import tablespace;
+select * from t1;
+x	z
+1	42
+2	41
+# Import a data file that contains instant DROP COLUMN metadata
+alter table t2 drop x;
+alter table t1 drop x, force;
+alter table t1 discard tablespace;
+flush tables t2 for export;
+unlock tables;
+alter table t1 import tablespace;
+# restart
+select * from t1;
+z
+42
+41
+drop table t2;
+drop table t1;
+CREATE TABLE t1 (id INT PRIMARY KEY AUTO_INCREMENT, i1 INT) ENGINE=INNODB;
+CREATE TABLE t2 (id INT PRIMARY KEY AUTO_INCREMENT, i1 INT, i2 INT) ENGINE=INNODB;
+ALTER TABLE t2 DROP COLUMN i2, ALGORITHM=INSTANT;
+ALTER TABLE t2 DISCARD TABLESPACE;
+FLUSH TABLE t1 FOR EXPORT;
+UNLOCK TABLES;
+ALTER TABLE t2 IMPORT TABLESPACE;
+DROP TABLE t2, t1;
+CREATE TABLE t1 (id INT PRIMARY KEY, i2 INT, i1 INT) ENGINE=INNODB;
+INSERT INTO t1 VALUES (1, 1, 1);
+ALTER TABLE t1 MODIFY COLUMN i2 INT AFTER i1, ALGORITHM=INSTANT;
+CREATE TABLE t2 LIKE t1;
+ALTER TABLE t2 DISCARD TABLESPACE;
+FLUSH TABLE t1 FOR EXPORT;
+UNLOCK TABLES;
+ALTER TABLE t2 IMPORT TABLESPACE;
+SELECT * FROM t2;
+id	i1	i2
+1	1	1
+DROP TABLE t2, t1;
+CREATE TABLE t1 (id INT PRIMARY KEY, i2 INT, i1 INT) ENGINE=INNODB;
+INSERT INTO t1 VALUES (1, 1, 1);
+ALTER TABLE t1 DROP COLUMN i2, ALGORITHM=INSTANT;
+CREATE TABLE t2 LIKE t1;
+ALTER TABLE t2 DISCARD TABLESPACE;
+FLUSH TABLE t1 FOR EXPORT;
+UNLOCK TABLES;
+ALTER TABLE t2 IMPORT TABLESPACE;
+SELECT * FROM t2;
+id	i1
+1	1
+DROP TABLE t2, t1;
+CREATE TABLE t1 (id INT PRIMARY KEY, i2 INT, i1 INT)
+ENGINE=INNODB PAGE_COMPRESSED=1;
+INSERT INTO t1 VALUES (1, 1, 1);
+ALTER TABLE t1 DROP COLUMN i2, ALGORITHM=INSTANT;
+CREATE TABLE t2 LIKE t1;
+ALTER TABLE t2 DISCARD TABLESPACE;
+FLUSH TABLE t1 FOR EXPORT;
+UNLOCK TABLES;
+ALTER TABLE t2 IMPORT TABLESPACE;
+DROP TABLE t2, t1;
+CREATE TABLE t1 (id INT PRIMARY KEY AUTO_INCREMENT, i2 INT, i1 INT) ENGINE=INNODB;
+INSERT INTO t1 (i2) SELECT 4 FROM seq_1_to_1024;
+ALTER TABLE t1 DROP COLUMN i2, ALGORITHM=INSTANT;
+CREATE TABLE t2 LIKE t1;
+ALTER TABLE t2 DISCARD TABLESPACE;
+FLUSH TABLE t1 FOR EXPORT;
+UNLOCK TABLES;
+ALTER TABLE t2 IMPORT TABLESPACE;
+DROP TABLE t2, t1;
+CREATE TABLE t1 ( id INT NOT NULL, i1 INT, i2 INT, PRIMARY KEY (id)) engine=innodb;
+CREATE TABLE t2 ( id INT NOT NULL, i1 INT, i2 INT, PRIMARY KEY (id)) engine=innodb;
+ALTER TABLE test.t1 add COLUMN i3 INT AFTER i1;
+ALTER TABLE t2 DISCARD TABLESPACE;
+FLUSH TABLES t1 FOR EXPORT;
+UNLOCK TABLES;
+ALTER TABLE t2 IMPORT TABLESPACE;
+ERROR HY000: Index for table 't2' is corrupt; try to repair it
+DROP TABLE t1, t2;
+#
+# MDEV-28919 Assertion `(((core_null) + 7) >> 3) ==
+# oindex.n_core_null_bytes || !not_redundant()' failed
+#
+call mtr.add_suppression(" InnoDB: Tablespace for table `test`.`t` is set as discarded");
+CREATE TABLE t (a INTEGER, b INTEGER as (a) VIRTUAL,
+c INTEGER)engine=innodb;
+ALTER TABLE t DISCARD TABLESPACE;
+FLUSH TABLES;
+ALTER TABLE t DROP COLUMN b, algorithm=instant;
+Warnings:
+Warning	1814	Tablespace has been discarded for table `t`
+ALTER TABLE t DROP COLUMN c, algorithm=instant;
+Warnings:
+Warning	1814	Tablespace has been discarded for table `t`
+CREATE TABLE t1(a INTEGER)ENGINE=InnoDB;
+INSERT INTO t1 VALUES(1);
+FLUSH TABLE t1 FOR EXPORT;
+unlock tables;
+ALTER TABLE t IMPORT tablespace;
+check table t;
+Table	Op	Msg_type	Msg_text
+test.t	check	status	OK
+select * from t;
+a
+1
+DROP TABLE t, t1;

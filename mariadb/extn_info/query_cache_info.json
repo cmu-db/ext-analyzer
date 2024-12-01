@@ -1,0 +1,9 @@
+{
+  "type": "information_schema",
+  "so_name": "query_cache_info",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "qc_info"
+  }
+}

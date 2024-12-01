@@ -1,0 +1,203 @@
+-- source include/have_innodb.inc
+--disable_service_connection
+
+SET @save_innodb_stats_persistent=@@GLOBAL.innodb_stats_persistent;
+SET GLOBAL innodb_stats_persistent = OFF;
+
+--echo # Create a table with a large varchar field that we index the prefix
+--echo # of and ensure we only trigger cluster lookups when we expect it.
+create table prefixinno (
+       id int not null,
+       fake_id int not null,
+       bigfield varchar(4096),
+       primary key(id),
+       index bigfield_idx (bigfield(32)),
+       index fake_id_bigfield_prefix (fake_id, bigfield(32))
+) engine=innodb;
+
+insert into prefixinno values (1, 1001, repeat('a', 1)),
+                              (8, 1008, repeat('b', 8)),
+                              (24, 1024, repeat('c', 24)),
+                              (31, 1031, repeat('d', 31)),
+                              (32, 1032, repeat('x', 32)),
+                              (33, 1033, repeat('y', 33)),
+                              (128, 1128, repeat('z', 128));
+
+select * from prefixinno;
+
+--echo # Eligible for optimization.
+select id, bigfield from prefixinno where bigfield = repeat('d', 31);
+
+--echo # Eligible for optimization, access via fake_id only.
+select id, bigfield from prefixinno where fake_id = 1031;
+
+--echo # Not eligible for optimization, access via fake_id of big row.
+select id, bigfield from prefixinno where fake_id = 1033;
+
+--echo # Not eligible for optimization.
+select id, bigfield from prefixinno where bigfield = repeat('x', 32);
+select id, bigfield from prefixinno where bigfield = repeat('y', 33);
+
+select id, bigfield from prefixinno where bigfield = repeat('b', 8);
+select id, bigfield from prefixinno where bigfield = repeat('c', 24);
+select id, bigfield from prefixinno where bigfield = repeat('z', 128);
+select id, bigfield from prefixinno where fake_id = 1033;
+
+drop table prefixinno;
+
+--echo # Multi-byte handling case
+
+SET NAMES utf8mb4;
+CREATE TABLE t1(
+	f1 varchar(10) CHARACTER SET UTF8MB4 COLLATE UTF8MB4_BIN,
+	INDEX (f1(3)))ENGINE=INNODB;
+
+INSERT INTO t1 VALUES('a'), ('cccc'), ('až'), ('cčc'), ('ggᵷg'), ('¢¢');
+INSERT INTO t1 VALUES('தமிழ்'), ('🐱🌑'), ('🌒'), ('🌑');
+INSERT INTO t1 VALUES('😊me'), ('eu€'), ('ls¢');
+
+--echo # Eligible - record length is shorter than prefix
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'a';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like 'c%';
+
+--echo # Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'až';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'தமிழ்';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like 'ggᵷ%';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '😊%';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'ls¢';
+
+--echo # Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '¢¢%';
+
+--echo # Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '🐱🌑%';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '🌑%';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '🌒%';
+
+DROP TABLE t1;
+
+--echo # Multi-byte with minimum character length > 1 bytes
+
+CREATE TABLE t1(
+	f1 varchar(10) CHARACTER SET UTF16 COLLATE UTF16_BIN,
+	INDEX (f1(3)))ENGINE=INNODB;
+
+INSERT INTO t1 VALUES('a'), ('cccc'), ('až'), ('cčc'), ('ggᵷg'), ('¢¢');
+INSERT INTO t1 VALUES('தமிழ்'), ('🐱🌑'), ('🌒'), ('🌑');
+INSERT INTO t1 VALUES('😊me'), ('eu€'), ('ls¢');
+
+--echo # Eligible - record length is shorter than prefix
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'a';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like 'c%';
+
+--echo # Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'až';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'தமிழ்';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like 'ggᵷ%';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '😊%';
+
+--echo # Not eligible - record length longer than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 = 'ls¢';
+
+--echo # Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX(`f1`) WHERE f1 like '¢¢%';
+
+--echo # Eligible - record length shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '🐱🌑%';
+
+--echo # Eligible - record length is shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '🌑%';
+
+--echo # Eligible - record length is shorter than prefix length
+SELECT f1 FROM t1 FORCE INDEX (`f1`) WHERE f1 like '🌒%';
+
+DROP TABLE t1;
+
+CREATE TABLE t1(
+	col1 INT,
+	col2 BLOB DEFAULT NULL,
+	INDEX `idx1`(col2(4), col1))ENGINE=INNODB;
+INSERT INTO t1 VALUES (2, 'test'), (3, repeat('test1', 2000));
+INSERT INTO t1(col1) VALUES(1);
+
+--echo # Eligible - record length is shorter than prefix length
+SELECT col1 FROM t1 FORCE INDEX (`idx1`) WHERE col2 is NULL;
+
+--echo # Not eligible - record length longer than prefix index
+SELECT col1 FROM t1 FORCE INDEX (`idx1`) WHERE col2 like 'test1%';
+
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-20464 Division by 0 in row_search_with_covering_prefix()
+--echo #
+CREATE TABLE t1 (f1 INT, f2 INT AS (f1), f3 INT AS (f1), f4 INT AS (f1),
+                 KEY (f1,f2,f3)) ENGINE=InnoDB;
+INSERT INTO t1 (f1) VALUES (NULL),(0);
+SELECT f1, MAX(f3), COUNT(f4) FROM t1 GROUP BY f1;
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-23600 Division by 0 in row_search_with_covering_prefix()
+--echo #
+CREATE TABLE t(c POINT UNIQUE) ENGINE=InnoDB;
+INSERT t SET c=POINT(1,1);
+SELECT * FROM t WHERE c > (SELECT MAX(c) FROM t);
+DROP TABLE t;
+
+--echo #
+--echo # MDEV-12486 Wrong results with innodb_prefix_index_cluster_optimization
+--echo #
+CREATE TABLE wp_blogs (
+  blog_id bigint(20) NOT NULL auto_increment,
+  site_id bigint(20) NOT NULL default '0',
+  domain varchar(200) NOT NULL default '',
+  path varchar(100) NOT NULL default '',
+  registered datetime NOT NULL default '0000-00-00 00:00:00',
+  last_updated datetime NOT NULL default '0000-00-00 00:00:00',
+  public tinyint(2) NOT NULL default '1',
+  archived tinyint(2) NOT NULL default '0',
+  mature tinyint(2) NOT NULL default '0',
+  spam tinyint(2) NOT NULL default '0',
+  deleted tinyint(2) NOT NULL default '0',
+  lang_id int(11) NOT NULL default '0',
+  PRIMARY KEY  (blog_id),
+  KEY domain (domain(50),path(5)),
+  KEY lang_id (lang_id)
+) ENGINE=InnoDB DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+
+INSERT INTO wp_blogs (domain, path) VALUES
+('domain.no', '/fondsinvesteringer/'), ('domain.no', '/'),
+('foo', 'bar'), ('bar', 'foo'), ('foo', 'foo'), ('bar', 'bar'),
+('foo', 'foobar'), ('bar', 'foobar'), ('foobar', 'foobar');
+
+SELECT blog_id FROM wp_blogs WHERE domain IN ('domain.no')
+AND path IN ( '/fondsinvesteringer/', '/' );
+
+DROP TABLE wp_blogs;
+
+SET GLOBAL innodb_stats_persistent = @save_innodb_stats_persistent;
+--enable_service_connection

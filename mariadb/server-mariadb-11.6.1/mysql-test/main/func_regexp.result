@@ -1,0 +1,214 @@
+drop table if exists t1;
+set names latin1;
+#
+# Bug#31081 server crash in regexp function
+#
+drop table if exists t1;
+create table t1 as
+select repeat(' ', 64) as s1, repeat(' ',64) as s2
+union
+select null, null;
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `s1` varchar(64) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+  `s2` varchar(64) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+delete from t1;
+insert into t1 values('aaa','aaa');
+insert into t1 values('aaa|qqq','qqq');
+insert into t1 values('gheis','^[^a-dXYZ]+$');
+insert into t1 values('aab','^aa?b');
+insert into t1 values('Baaan','^Ba*n');
+insert into t1 values('aaa','qqq|aaa');
+insert into t1 values('qqq','qqq|aaa');
+insert into t1 values('bbb','qqq|aaa');
+insert into t1 values('bbb','qqq');
+insert into t1 values('aaa','aba');
+insert into t1 values(null,'abc');
+insert into t1 values('def',null);
+insert into t1 values(null,null);
+insert into t1 values('ghi','ghi[');
+select HIGH_PRIORITY s1 regexp s2 from t1;
+s1 regexp s2
+0
+0
+0
+1
+1
+1
+1
+1
+1
+1
+NULL
+NULL
+NULL
+NULL
+drop table t1;
+create table t1 (xxx char(128));
+insert into t1 (xxx) values('this is a test of some long text to see what happens');
+select * from t1 where xxx regexp('is a test of some long text to');
+xxx
+this is a test of some long text to see what happens
+explain extended select * from t1 where xxx regexp('is a test of some long text to');
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	t1	system	NULL	NULL	NULL	NULL	1	100.00	
+Warnings:
+Note	1003	select 'this is a test of some long text to see what happens' AS `xxx` from dual where 1
+select * from t1 where xxx regexp('is a test of some long text to ');
+xxx
+this is a test of some long text to see what happens
+select * from t1 where xxx regexp('is a test of some long text to s');
+xxx
+this is a test of some long text to see what happens
+select * from t1 where xxx regexp('is a test of some long text to se');
+xxx
+this is a test of some long text to see what happens
+drop table t1;
+create table t1 (xxx char(128));
+insert into t1 (xxx) values('this is some text: to test - out.reg exp (22/45)');
+select * from t1 where xxx REGEXP '^this is some text: to test - out\\.reg exp [[(][0-9]+[/\\][0-9]+[])][ ]*$';
+xxx
+this is some text: to test - out.reg exp (22/45)
+drop table t1;
+select _latin1 0xFF regexp _latin1 '[[:lower:]]' COLLATE latin1_bin;
+_latin1 0xFF regexp _latin1 '[[:lower:]]' COLLATE latin1_bin
+1
+select _koi8r  0xFF regexp _koi8r  '[[:lower:]]' COLLATE koi8r_bin;
+_koi8r  0xFF regexp _koi8r  '[[:lower:]]' COLLATE koi8r_bin
+0
+select _latin1 0xFF regexp _latin1 '[[:upper:]]' COLLATE latin1_bin;
+_latin1 0xFF regexp _latin1 '[[:upper:]]' COLLATE latin1_bin
+0
+select _koi8r  0xFF regexp _koi8r  '[[:upper:]]' COLLATE koi8r_bin;
+_koi8r  0xFF regexp _koi8r  '[[:upper:]]' COLLATE koi8r_bin
+1
+select _latin1 0xF7 regexp _latin1 '[[:alpha:]]';
+_latin1 0xF7 regexp _latin1 '[[:alpha:]]'
+0
+select _koi8r  0xF7 regexp _koi8r  '[[:alpha:]]';
+_koi8r  0xF7 regexp _koi8r  '[[:alpha:]]'
+1
+select _latin1'a' regexp _latin1'A' collate latin1_general_ci;
+_latin1'a' regexp _latin1'A' collate latin1_general_ci
+1
+select _latin1'a' regexp _latin1'A' collate latin1_bin;
+_latin1'a' regexp _latin1'A' collate latin1_bin
+0
+create table t1 (a varchar(40));
+insert into t1 values ('C1'),('C2'),('R1'),('C3'),('R2'),('R3');
+prepare stmt1 from 'select a from t1 where a rlike ? order by a';
+set @a="^C.*";
+execute stmt1 using @a;
+a
+C1
+C2
+C3
+set @a="^R.*";
+execute stmt1 using @a;
+a
+R1
+R2
+R3
+deallocate prepare stmt1;
+drop table t1;
+# End of 4.1 tests
+SELECT 1 REGEXP NULL;
+1 REGEXP NULL
+NULL
+SELECT '' REGEXP BINARY NULL;
+'' REGEXP BINARY NULL
+NULL
+SELECT NULL REGEXP BINARY NULL;
+NULL REGEXP BINARY NULL
+NULL
+SELECT 'A' REGEXP BINARY NULL;
+'A' REGEXP BINARY NULL
+NULL
+SELECT "ABC" REGEXP BINARY NULL;
+"ABC" REGEXP BINARY NULL
+NULL
+# End of 5.0 tests
+CREATE TABLE t1(a INT, b CHAR(4));
+INSERT INTO t1 VALUES (1, '6.1'), (1, '7.0'), (1, '8.0');
+PREPARE stmt1 FROM "SELECT a FROM t1 WHERE a=1 AND '7.0' REGEXP b LIMIT 1";
+EXECUTE stmt1;
+a
+1
+EXECUTE stmt1;
+a
+1
+EXECUTE stmt1;
+a
+1
+EXECUTE stmt1;
+a
+1
+DEALLOCATE PREPARE stmt1;
+DROP TABLE t1;
+# End of 5.1 tests
+SELECT ' '  REGEXP '[[:blank:]]';
+' '  REGEXP '[[:blank:]]'
+1
+SELECT '\t' REGEXP '[[:blank:]]';
+'\t' REGEXP '[[:blank:]]'
+1
+SELECT ' '  REGEXP '[[:space:]]';
+' '  REGEXP '[[:space:]]'
+1
+SELECT '\t' REGEXP '[[:space:]]';
+'\t' REGEXP '[[:space:]]'
+1
+#
+# MDEV-13967 Parameter data type control for Item_long_func
+#
+SELECT REGEXP_INSTR('111222333',2);
+REGEXP_INSTR('111222333',2)
+4
+# End of 10.3 tests
+#
+# MDEV-33344 REGEXP empty string inconsistent
+#
+create table t1 (x char(5));
+insert t1 values (''), ('x');
+select 'foo' regexp x from t1 order by x asc;
+'foo' regexp x
+1
+0
+select 'foo' regexp x from t1 order by x desc;
+'foo' regexp x
+0
+1
+drop table t1;
+#
+# MDEV-21076 NOT NULL and UNIQUE constraints cause SUM() to yield an incorrect result
+#
+CREATE TABLE t0(c0 INT NOT NULL, c1 CHAR UNIQUE);
+INSERT INTO t0 VALUES (0, 1);
+INSERT INTO t0 VALUES (0, '');
+SELECT (c1 RLIKE c1), (c0 IS NULL) FROM t0;
+(c1 RLIKE c1)	(c0 IS NULL)
+1	0
+1	0
+SELECT SUM(a.t) FROM (SELECT (c1 RLIKE c1) = (c0 IS NULL) as t FROM t0) as a;
+SUM(a.t)
+0
+DROP TABLE t0;
+#
+# MDEV-21058 CREATE TABLE with generated column and RLIKE results in sigabrt
+#
+CREATE TABLE t1 (c0 INT);
+INSERT INTO t1 VALUES (1),(2),(3);
+SELECT ('' RLIKE '[') AS c1 FROM t1;
+ERROR 42000: Regex error 'missing terminating ] for character class at offset 1'
+SELECT REGEXP_INSTR('','[') AS c1 FROM t1;
+ERROR 42000: Regex error 'missing terminating ] for character class at offset 1'
+SELECT c0, '' RLIKE NULL AS c1, REGEXP_INSTR('', NULL) AS c2
+FROM t1 ORDER BY c0;
+c0	c1	c2
+1	NULL	NULL
+2	NULL	NULL
+3	NULL	NULL
+DROP TABLE t1;
+# End of 10.5 tests

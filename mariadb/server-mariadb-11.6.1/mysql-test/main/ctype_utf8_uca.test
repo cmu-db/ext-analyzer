@@ -1,0 +1,126 @@
+--echo #
+--echo # Start of 10.2 tests
+--echo #
+
+--echo #
+--echo # MDEV-10877 xxx_unicode_nopad_ci collations
+--echo #
+SET NAMES utf8;
+let $coll='utf8_unicode_nopad_ci';
+let $coll_pad='utf8_unicode_ci';
+--source include/ctype_pad_all_engines.inc
+
+let $coll='utf8_unicode_520_nopad_ci';
+let $coll_pad='utf8_unicode_520_ci';
+--source include/ctype_pad_all_engines.inc
+
+SET NAMES utf8 COLLATE utf8_unicode_nopad_ci;
+--source include/ctype_like_range_mdev14350.inc
+
+
+--echo #
+--echo # End of 10.2 tests
+--echo #
+
+
+--echo #
+--echo # Start of 10.3 tests
+--echo #
+
+--echo #
+--echo # MDEV-30556 UPPER() returns an empty string for U+0251 in Unicode-5.2.0+ collations for utf8
+--echo #
+
+SET NAMES utf8mb3 COLLATE utf8mb3_unicode_ci /*Unicode-4.0 folding*/;
+--source include/ctype_casefolding.inc
+
+SET NAMES utf8mb3 COLLATE utf8mb3_turkish_ci /*Unicode-4.0 folding, with Turkish mapping for I */;
+--source include/ctype_casefolding.inc
+
+SET NAMES utf8mb3 COLLATE utf8mb3_unicode_520_ci;
+--source include/ctype_casefolding.inc
+
+SET NAMES utf8mb3 COLLATE utf8mb3_unicode_520_nopad_ci;
+--source include/ctype_casefolding.inc
+
+SET NAMES utf8mb3 COLLATE utf8mb3_myanmar_ci;
+--source include/ctype_casefolding.inc
+
+SET NAMES utf8mb3 COLLATE utf8mb3_thai_520_w2;
+--source include/ctype_casefolding.inc
+
+
+--echo #
+--echo # End of 10.3 tests
+--echo #
+
+
+--echo #
+--echo # Start of 10.4 tests
+--echo #
+
+SET DEFAULT_STORAGE_ENGINE=MyISAM;
+SET NAMES utf8mb3 COLLATE utf8mb3_unicode_nopad_ci;
+--source include/ctype_nopad_prefix_unique.inc
+
+SET DEFAULT_STORAGE_ENGINE=HEAP;
+--source include/ctype_nopad_prefix_unique.inc
+
+SET DEFAULT_STORAGE_ENGINE=DEFAULT;
+
+
+SET default_storage_engine=MyISAM;
+--source include/ctype_utf8mb3_uca_char.inc
+SET default_storage_engine=MEMORY;
+--source include/ctype_utf8mb3_uca_char.inc
+SET default_storage_engine=DEFAULT;
+
+
+--echo #
+--echo # End of 10.4 tests
+--echo #
+
+--echo #
+--echo # Start of 10.10 tests
+--echo #
+
+--echo #
+--echo # MDEV-27009 Add UCA-14.0.0 collations
+--echo # Collation IDs in the protocol
+--echo #
+
+SET NAMES utf8mb3;
+SET @charset=(SELECT @@character_set_client);
+--source include/ctype_uca1400_ids_using_set_names.inc
+
+--echo #
+--echo # MDEV-29776 collation_connection and db_collation are too short in mysql.proc and mysql.event
+--echo #
+
+SET NAMES 'utf8mb3' COLLATE 'utf8mb3_uca1400_swedish_nopad_ai_ci';
+CREATE FUNCTION f1() RETURNS INT RETURN 1;
+SELECT length(collation_connection), collation_connection
+FROM mysql.proc WHERE db='test' AND name='f1';
+SELECT f1();
+DROP FUNCTION f1;
+SET NAMES utf8mb3;
+
+--echo #
+--echo # End of 10.10 tests
+--echo #
+
+
+--echo #
+--echo # Start of 10.10 tests
+--echo #
+
+--echo #
+--echo # MDEV-30661 UPPER() returns an empty string for U+0251 in uca1400 collations for utf8
+--echo #
+
+SET NAMES utf8mb3 COLLATE utf8mb3_uca1400_ai_ci;
+--source include/ctype_casefolding.inc
+
+--echo #
+--echo # End of 10.10 tests
+--echo #

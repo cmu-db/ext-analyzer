@@ -1,0 +1,51 @@
+--source include/galera_cluster.inc
+--source include/have_innodb.inc
+
+#
+# Ensure that the read_only option does not apply to Galera appliers and that replication
+# continues, the way MySQL replication would.
+#
+
+CREATE TABLE t1 (id INT PRIMARY KEY) ENGINE=InnoDB;
+
+--connection node_2
+SET GLOBAL read_only=TRUE;
+
+--connection node_1
+INSERT INTO t1 VALUES (1);
+
+--connection node_2
+SELECT COUNT(*) = 1 FROM t1;
+
+CREATE USER foo@localhost;
+GRANT ALL ON test.* to foo@localhost;
+
+--echo # Open connection to node 2 using 'foo' user.
+--let $port_2= \$NODE_MYPORT_2
+--connect(foo_node_2,127.0.0.1,foo,,test,$port_2,)
+
+--echo
+--echo # Connect with foo_node_2
+--connection foo_node_2
+--error ER_OPTION_PREVENTS_STATEMENT
+INSERT INTO t1 VALUES (2);
+# Writes to temporary tables are allowed
+CREATE TEMPORARY TABLE t2(id int not null primary key) engine=innodb;
+INSERT INTO t2 values (1);
+DROP TABLE t2;
+
+--connection node_2
+SELECT COUNT(*) AS EXPECT_1 FROM t1;
+
+--connection node_2
+SET GLOBAL read_only=TRUE;
+# Writes to temporary tables are allowed
+CREATE TEMPORARY TABLE t2(id int not null primary key) engine=innodb;
+INSERT INTO t2 values (1);
+DROP TABLE t2;
+
+# Cleanup
+SET GLOBAL read_only=FALSE;
+DROP TABLE t1;
+DROP USER foo@localhost;
+

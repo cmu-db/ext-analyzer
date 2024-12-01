@@ -1,0 +1,8 @@
+{
+  "type": "information_schema",
+  "so_name": "wsrep_info",
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "wsrep_info"
+  }
+}

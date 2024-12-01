@@ -1,0 +1,2 @@
+etc/mysql/mariadb.conf.d/auth_gssapi.cnf
+usr/lib/mysql/plugin/auth_gssapi.so

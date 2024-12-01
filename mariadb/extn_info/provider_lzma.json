@@ -1,0 +1,10 @@
+{
+  "type": "daemon",
+  "so_name": "provider_lzma",
+  "force_plus_permanent": true,
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "provider_lzma"
+  }
+}

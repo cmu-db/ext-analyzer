@@ -1,0 +1,8 @@
+{
+  "type": "authentication",
+  "installable": false,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "win_auth_client"
+  }
+}

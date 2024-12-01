@@ -1,0 +1,10 @@
+--source include/have_innodb.inc
+
+let $alter_algorithm=COPY;
+--source alter_algorithm.inc
+let $alter_algorithm=INPLACE;
+--source alter_algorithm.inc
+let $alter_algorithm=NOCOPY;
+--source alter_algorithm.inc
+let $alter_algorithm=INSTANT;
+--source alter_algorithm.inc

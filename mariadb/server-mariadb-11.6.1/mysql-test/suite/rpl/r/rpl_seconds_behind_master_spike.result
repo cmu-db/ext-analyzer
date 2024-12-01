@@ -1,0 +1,63 @@
+include/master-slave.inc
+[connection master]
+connection slave;
+include/stop_slave.inc
+CHANGE MASTER TO MASTER_USE_GTID=NO;
+include/start_slave.inc
+include/stop_slave.inc
+SET @save_dbug= @@GLOBAL.debug_dbug;
+SET @@global.debug_dbug="+d,pause_sql_thread_on_relay_fde_after_trans";
+SET @@global.debug_dbug="+d,negate_clock_diff_with_master";
+include/start_slave.inc
+# Future events must be logged at least 2 seconds after
+# the slave starts
+connection master;
+# Write events to ensure slave will be consistent with master
+create table t1 (a int);
+insert into t1 values (1);
+# Flush logs on master forces slave to generate a Format description
+# event in its relay log
+flush logs;
+connection slave;
+# On the next FDE, the slave should have the master CREATE/INSERT events
+SET DEBUG_SYNC='now WAIT_FOR paused_on_fde';
+select count(*)=1 from t1;
+count(*)=1
+1
+# The relay log FDE has been processed - here we check to ensure it was
+# not considered in Seconds_Behind_Master calculation
+connection slave1;
+# Safely resume slave SQL thread
+# Prove SQL thread is in state "debug sync point: now"
+SET @@global.debug_dbug="-d,pause_sql_thread_on_fde";
+SET DEBUG_SYNC='now SIGNAL sql_thread_continue';
+# Wait for SQL thread to continue into normal execution
+SET DEBUG_SYNC='RESET';
+#
+# MDEV-29639
+# When receiving an event after the SQL Thread idles,
+# Seconds_Behind_Master should not update before it updates
+# last_master_timestamp
+connection slave;
+include/stop_slave.inc
+set @@global.debug_dbug="+d,pause_sql_thread_on_next_event";
+include/start_slave.inc
+connection master;
+insert into t1 values(2);
+include/save_master_gtid.inc
+connection slave;
+set debug_sync='now wait_for paused_on_event';
+connection master;
+# Sleeping 1s to create a visible SBM gap between events
+insert into t1 values(3);
+include/save_master_gtid.inc
+connection slave;
+set debug_sync='now wait_for paused_on_event';
+include/stop_slave.inc
+set debug_sync='RESET';
+SET @@global.debug_dbug=$save_dbug;
+include/start_slave.inc
+include/sync_with_master_gtid.inc
+connection master;
+DROP TABLE t1;
+include/rpl_end.inc

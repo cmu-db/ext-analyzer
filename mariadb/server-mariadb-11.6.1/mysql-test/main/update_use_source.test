@@ -1,0 +1,82 @@
+--source include/have_sequence.inc
+--source include/have_innodb.inc
+--source include/no_valgrind_without_big.inc
+
+set @save_default_engine=@@default_storage_engine;
+
+--echo #######################################
+--echo #                                     #
+--echo #            Engine InnoDB            #
+--echo #                                     #
+--echo #######################################
+set global innodb_stats_persistent=1;
+set default_storage_engine=InnoDB;
+--source include/update_use_source.inc
+--source include/update_use_source_ext.inc
+
+--echo #######################################
+--echo #                                     #
+--echo #            Engine Aria              #
+--echo #                                     #
+--echo #######################################
+set default_storage_engine=Aria;
+--source include/update_use_source.inc
+--source include/update_use_source_ext.inc
+
+--echo #######################################
+--echo #                                     #
+--echo #            Engine MyISAM            #
+--echo #                                     #
+--echo #######################################
+set default_storage_engine=MyISAM;
+--source include/update_use_source.inc
+--source include/update_use_source_ext.inc
+
+--echo #######################################
+--echo #                                     #
+--echo #            Engine MEMORY            #
+--echo #                                     #
+--echo #######################################
+set default_storage_engine=MEMORY;
+--source include/update_use_source.inc
+
+set @@default_storage_engine=@save_default_engine;
+
+--echo #
+--echo # Test with MyISAM
+--echo #
+
+create table t1 (old_c1 integer,
+                 old_c2 integer,
+                 c1 integer,
+                 c2 integer,
+                 c3 integer) engine=MyISAM;
+insert t1 (c1,c2,c3) select 0,seq,seq%10 from seq_1_to_500;
+insert t1 (c1,c2,c3) select 1,seq,seq%10 from seq_1_to_400;
+insert t1 (c1,c2,c3) select 2,seq,seq%10 from seq_1_to_300;
+insert t1 (c1,c2,c3) select 3,seq,seq%10 from seq_1_to_200;
+create index t1_idx1 on t1(c3);
+analyze table t1;
+
+update t1 set c1=2 where exists (select 'x' from t1);
+select count(*) from t1 where c1=2;
+update t1 set c1=3 where c3 in (select c3 from t1 b where t1.c3=b.c1);
+select count(*) from t1 where c1=3;
+drop table t1;
+
+
+--echo #
+--echo # Test error on multi_update conversion on view
+--echo # with order by or limit
+--echo #
+
+create table t1 (c1 integer) engine=InnoDb;
+create table t2 (c1 integer) engine=InnoDb;
+create view v1 as select t1.c1 as "t1c1" ,t2.c1 as "t2c1"
+        from t1,t2 where t1.c1=t2.c1;
+# 'order by 1' should be considered as in 'select * from v1 order 1'
+update v1 set t1c1=2 order by 1;
+update v1 set t1c1=2 limit 1;
+drop table t1;
+drop table t2;
+drop view v1;

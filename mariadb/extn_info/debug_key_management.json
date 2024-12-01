@@ -1,0 +1,8 @@
+{
+  "type": "encryption",
+  "installable": false,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "debug_key_management"
+  }
+}

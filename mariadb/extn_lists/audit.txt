@@ -1,0 +1,2 @@
+server_audit
+sql_error_log

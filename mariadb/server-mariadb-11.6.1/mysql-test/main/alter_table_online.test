@@ -1,0 +1,306 @@
+--source include/binlog_combinations.inc
+--source include/have_innodb.inc
+--source include/not_embedded.inc
+
+--echo #
+--echo # alter ignore cannot be done online
+--echo #
+create table t (a int);
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter ignore table t add primary key (a), algorithm=copy, lock=none;
+drop table t;
+
+--echo #
+--echo # MDEV-28771 Assertion `table->in_use&&tdc->flushed' failed after ALTER
+--echo #
+
+create table t (a char(1));
+insert into t values ('a'),('b');
+select * from t join t as t2 join t as t3;
+--error ER_TRUNCATED_WRONG_VALUE
+alter table t modify a int;
+select * from t;
+drop table t;
+
+create table t (c double precision key,c2 char,c3 year);
+insert into t values (7,3,1);
+--error ER_BAD_FIELD_ERROR
+select a from t where a=all (select a from t where b=2 union select a from t where b=2);
+insert into t values (3,1,1);
+--error ER_TRUNCATED_WRONG_VALUE
+alter table t change c c date,add key(c);
+select * from t;
+drop table t;
+
+set sql_mode='';
+create table t (c char unique,c2 int,stamp timestamp);
+insert into t values (1,1,1),(2,2,2),(3,3,3),(4,4,4),(5,5,5);
+--error ER_OPERAND_COLUMNS
+update t set c=(select * from t) where c in (select * from t);
+--error ER_DUP_ENTRY
+alter table t modify c date;
+select * from t;
+drop table t;
+set sql_mode=default;
+
+--echo #
+--echo # MDEV-28944 XA assertions failing in binlog_rollback and binlog_commit
+--echo #
+--disable_view_protocol
+CREATE TABLE t (a INT) ENGINE=MyISAM;
+INSERT INTO t VALUES (1);
+
+--connect (con1,localhost,root,,test)
+XA START 'xid';
+SELECT * FROM t;
+
+--connection default
+--error ER_LOCK_WAIT_TIMEOUT
+ALTER TABLE t NOWAIT ADD KEY (a);
+
+--connection con1
+UPDATE t SET a = 2;
+XA END 'xid';
+XA COMMIT 'xid' ONE PHASE;
+
+DROP TABLE t;
+--disconnect con1
+--connection default
+--enable_view_protocol
+
+--echo #
+--echo # MDEV-29068 Cascade foreign key updates do not apply in online alter
+--echo #
+create table t1 (a int primary key) engine=InnoDB;
+insert into t1 values (1),(2),(3);
+create table t2 (b int, foreign key (b)
+                        references t1 (a)
+                        on update cascade) engine=InnoDB;
+insert into t2 values (1),(2),(3);
+
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t2 add c int, algorithm=copy, lock=none;
+alter table t2 add c int, algorithm=inplace, lock=none;
+
+create or replace table t2 (b int, foreign key (b)
+                            references t1 (a)
+                            on delete set null) engine=InnoDB;
+
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t2 add c int, algorithm=copy, lock=none;
+alter table t2 add c int, algorithm=inplace, lock=none;
+
+create or replace table t2 (b int, foreign key (b)
+                            references t1 (a)
+                            on delete no action) engine=InnoDB;
+
+insert into t2 values (1),(2),(3);
+alter table t2 add c int, algorithm=copy, lock=none;
+
+create or replace table t2 (b int, foreign key (b)
+                            references t1 (a)
+                            on update restrict) engine=InnoDB;
+
+insert into t2 values (1),(2),(3);
+alter table t2 add c int, algorithm=copy, lock=none;
+drop table t2, t1;
+
+create table t1 (a int primary key, b int unique) engine=InnoDB;
+insert into t1 values (1, 1),(2, 2),(3, 3);
+create table t2 (a int references t1 (a),
+                 b int references t1 (b) on update cascade) engine=InnoDB;
+insert into t2 values (1, 1),(2, 2);
+
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t2 add c int, algorithm=copy, lock=none;
+alter table t2 add c int, algorithm=copy;
+alter table t2 add d int, algorithm=inplace;
+# Cleanup
+drop table t2, t1;
+
+--echo #
+--echo # MDEV-30891 Assertion `!table->versioned(VERS_TRX_ID)' failed
+--echo # in Write_rows_log_event::binlog_row_logging_function
+--echo #
+set system_versioning_alter_history= keep;
+create table t1 (id int,
+                 row_start bigint unsigned generated always as row start,
+                 row_end bigint unsigned generated always as row end,
+                 period for system_time (row_start, row_end))
+                engine=innodb with system versioning;
+
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t1 add c int, algorithm=copy, lock=none;
+alter table t1 add c int, algorithm=inplace;
+alter table t1 add d int, lock=none;
+
+set system_versioning_alter_history= default;
+drop table t1;
+
+--echo #
+--echo # MDEV-31058 ER_KEY_NOT_FOUND upon concurrent CHANGE column autoinc
+--echo # and DML
+--echo #
+create table t (a serial, b int) engine=innodb;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t drop a, modify b serial, algorithm=copy, lock=none;
+
+set statement sql_mode= NO_AUTO_VALUE_ON_ZERO for
+alter table t drop a, modify b serial, algorithm=copy, lock=none;
+
+create or replace table t (a serial, b int) engine=innodb;
+show create table t;
+--echo # a is unique in the old table, but is shrunk in the new one.
+--echo # Only unsafe approach is fine because of possible collisions.
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t modify a int, modify b serial, algorithm=copy, lock=none;
+
+--echo #
+--echo # Check that we treat autoinc columns correctly modify old autoinc is
+--echo # fine, adding new autoinc for existed column is unsafe.
+--echo #
+create or replace table t (a serial) engine=innodb;
+
+alter table t change a b serial, algorithm=copy, lock=none;
+
+--echo # Shrinking the autoinc field is considered safe.
+--echo # ER_WARN_DATA_OUT_OF_RANGE should be emitted otherwise.
+alter table t change b b int auto_increment primary key,
+              algorithm=copy, lock=none;
+
+alter table t add c int default(0), drop primary key, drop key a;
+--echo # key `b` is still there
+show create table t;
+
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t drop b, change c c serial, algorithm=copy, lock=none;
+
+--echo # Check existed unique keys.
+create or replace table t(a int, b int not null, c int not null, d int);
+
+--echo # No unique in the old table;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t add unique(b, c), modify d int auto_increment, add key(d),
+              algorithm=copy, lock=none;
+
+alter table t add unique(a, b);
+--echo # Unique in the old table has nulls;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t modify d int auto_increment, add key(d),
+              algorithm=copy, lock=none;
+
+alter table t add unique(b, c);
+--echo # Change unique's column;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t change b x bigint, modify d int auto_increment, add key(d),
+              algorithm=copy, lock=none;
+
+--echo # Finally good. Simple renames with a type unchanged will not affect
+--echo # the result. Also NOT NULL -> NULL transform is fine.
+alter table t modify d int auto_increment, add key(d),
+              change b x int null,
+              algorithm=copy, lock=none;
+
+drop table t;
+
+--echo # MDEV-31172 Server crash or ASAN errors in online_alter_check_autoinc
+create table t (a int, b int, c char(8), key(a,b,c));
+alter table t modify c int auto_increment key, algorithm=copy;
+drop table t;
+
+--echo # MDEV-31601 Some ALTER TABLE .. fail when they worked before, and with
+--echo # a wrong error message
+create table t (a int) engine=aria;
+insert into t values (1),(2);
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+alter table t algorithm=nocopy, order by a;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+alter table t engine=myisam, algorithm=inplace;
+drop table t;
+
+create temporary table t (f int);
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+alter table t force, algorithm=instant;
+drop table t;
+
+create sequence s engine=MyISAM;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table s engine=Aria, lock=none;
+alter table s engine=Aria;
+drop sequence  s;
+
+
+--echo # MDEV-31631 Adding auto-increment column to a table with history online
+--echo # behaves differently from non-online
+create sequence s;
+create table t1(a int, x int NULL default(nextval(s)));
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t1 add b int default (nextval(s)), lock=none;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t1 add b int primary key auto_increment, lock=none;
+
+create table t2(a int, b int NULL default(nextval(s)));
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+alter table t2 modify b int not null default (nextval(s)), lock=none;
+
+drop table t2;
+drop table t1;
+drop sequence s;
+
+--echo #
+--echo # MDEV-33348 ALTER TABLE lock waiting stages are indistinguishable
+--echo #
+--disable_view_protocol
+--connect con2, localhost, root
+
+create table t1 (a int);
+insert t1 values (5);
+
+start transaction;
+select * from t1;
+
+--connection default
+--let $con= `select connection_id()`
+send alter table t1 add b int NULL, algorithm= copy, lock= none;
+
+--connection con2
+evalp set @con= $con;
+
+let $wait_condition= select stage = 4 and progress = 100
+                              and state= "Waiting for table metadata lock"
+                       from information_schema.processlist where id = @con;
+--source include/wait_condition.inc
+
+query_vertical select stage, state, info from information_schema.processlist where id = @con;
+
+rollback;
+
+--connection default
+reap;
+
+drop table t1;
+--disconnect con2
+--enable_view_protocol
+
+
+--echo # MDEV-34164 Server crashes when executing OPTIMIZE or REPAIR TABLE for InnoDB temporary tables
+create temporary table t1 (i int) engine=innodb;
+create table t2 (i int) engine=aria ;
+optimize table t1,t2;
+drop table t1,t2;
+
+create temporary table t1 (f int) engine=innodb;
+create temporary table t2 (f int) engine=innodb;
+optimize local table t1,t2;
+drop table t1,t2;
+
+set @save_sql_mode = @@sql_mode;
+set sql_mode= '';
+create temporary table t (c decimal zerofill,c2 int zerofill,c3 char binary,key(c)) engine=innodb;
+insert into t values (1,1,1);
+set session enforce_storage_engine=aria;
+optimize no_write_to_binlog table t;
+drop table t;
+set sql_mode= @save_sql_mode;
+
+--echo # End of 11.2 tests

@@ -1,0 +1,118 @@
+#
+# Test fetching from stats tables after manual update (ie FLUSH TABLE
+# can be used to forcibly (re)fetch the stats from disk)
+#
+
+-- source include/have_innodb.inc
+# Various sizes printed in this test depend on the page size and the
+# functionality tested here is not related to the page size, so we only
+# test with 16k page size.
+-- source include/have_innodb_16k.inc
+
+-- vertical_results
+
+set @save_use_stat_tables =  @@use_stat_tables;
+set @@use_stat_tables = COMPLEMENTARY;
+
+CREATE TABLE test_ps_fetch
+(a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX idx (c, d))
+ENGINE=INNODB STATS_PERSISTENT=1;
+
+ANALYZE TABLE test_ps_fetch;
+
+SELECT n_rows, clustered_index_size, sum_of_other_index_sizes
+FROM mysql.innodb_table_stats WHERE table_name = 'test_ps_fetch';
+
+SELECT index_name, stat_name, stat_value, sample_size, stat_description
+FROM mysql.innodb_index_stats WHERE table_name = 'test_ps_fetch'
+ORDER BY index_name, stat_name;
+
+SELECT index_name, seq_in_index, column_name, cardinality
+FROM information_schema.statistics WHERE table_name = 'test_ps_fetch'
+ORDER BY index_name, seq_in_index;
+
+SELECT
+table_rows, avg_row_length, max_data_length, index_length
+FROM information_schema.tables WHERE table_name = 'test_ps_fetch';
+
+UPDATE mysql.innodb_table_stats SET
+n_rows = 1000,
+clustered_index_size = 5
+WHERE
+table_name = 'test_ps_fetch';
+
+UPDATE mysql.innodb_index_stats SET
+stat_value = 20
+WHERE
+table_name = 'test_ps_fetch' AND
+index_name = 'PRIMARY' AND
+stat_name = 'n_diff_pfx01';
+
+UPDATE mysql.innodb_index_stats SET
+stat_value = 90
+WHERE
+table_name = 'test_ps_fetch' AND
+index_name = 'PRIMARY' AND
+stat_name = 'n_diff_pfx02';
+
+UPDATE mysql.innodb_index_stats SET
+stat_value = 3
+WHERE
+table_name = 'test_ps_fetch' AND
+index_name = 'idx' AND
+stat_name = 'n_diff_pfx01';
+
+UPDATE mysql.innodb_index_stats SET
+stat_value = 11
+WHERE
+table_name = 'test_ps_fetch' AND
+index_name = 'idx' AND
+stat_name = 'n_diff_pfx02';
+
+FLUSH TABLE test_ps_fetch;
+
+SELECT seq_in_index, column_name, cardinality
+FROM information_schema.statistics WHERE table_name = 'test_ps_fetch'
+ORDER BY index_name, seq_in_index;
+
+SELECT
+table_rows, avg_row_length, max_data_length, index_length
+FROM information_schema.tables WHERE table_name = 'test_ps_fetch';
+
+DROP TABLE test_ps_fetch;
+set @@use_stat_tables = @save_use_stat_tables;
+
+--echo #
+--echo # MDEV-28613 LeakSanitizer caused by I_S query using LIMIT ROWS EXAMINED
+--echo #
+CREATE TABLE t1(f1 VARCHAR(255), FULLTEXT(f1))ENGINE=InnoDB;
+SELECT * FROM INFORMATION_SCHEMA.INNODB_SYS_INDEXES LIMIT ROWS EXAMINED 5;
+SELECT * FROM INFORMATION_SCHEMA.INNODB_SYS_TABLES LIMIT ROWS EXAMINED 5;
+SELECT * FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESTATS LIMIT ROWS EXAMINED 5;
+--disable_result_log
+SELECT SPACE FROM INFORMATION_SCHEMA.INNODB_SYS_TABLESPACES LIMIT ROWS EXAMINED 5;
+--enable_result_log
+SELECT * FROM INFORMATION_SCHEMA.INNODB_SYS_VIRTUAL LIMIT ROWS EXAMINED 5;
+SELECT * FROM INFORMATION_SCHEMA.INNODB_SYS_FOREIGN LIMIT ROWS EXAMINED 5;
+SELECT * FROM INFORMATION_SCHEMA.INNODB_SYS_FOREIGN_COLS LIMIT ROWS EXAMINED 5;
+DROP TABLE t1;
+
+--echo #
+--echo # MDEV-33462 Disallow LOCK=NONE operation on statistics table
+--echo #
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+ALTER TABLE mysql.innodb_table_stats FORCE, LOCK=NONE, ALGORITHM=INPLACE;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED_REASON
+ALTER TABLE mysql.innodb_index_stats FORCE, LOCK=NONE, ALGORITHM=INPLACE;
+
+--echo #
+--echo #  MDEV-34474 InnoDB: Failing assertion: stat_n_leaf_pages > 0
+--echo #           in ha_innobase::estimate_rows_upper_bound
+--echo #
+
+CREATE TABLE t (c1 INT,c2 INT,
+		INDEX(c1))STATS_PERSISTENT=1 ENGINE=INNODB;
+UPDATE mysql.innodb_index_stats SET stat_value=0 WHERE database_name like "test" and table_name like 't';
+UPDATE mysql.innodb_table_stats SET clustered_index_size= 0, sum_of_other_index_sizes=0 WHERE database_name like "test" and table_name like 't';
+UPDATE t SET c1=+1 ORDER BY c2;
+DROP TABLE t;

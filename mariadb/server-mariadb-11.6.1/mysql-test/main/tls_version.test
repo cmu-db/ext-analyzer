@@ -1,0 +1,26 @@
+# Tests for SSL connections, only run if mysqld is compiled
+# with support for SSL.
+
+-- source include/have_ssl_communication.inc
+--echo #default is highest available version: TLSv1.2
+--exec $MYSQL --host=localhost --ssl -e "show status like 'ssl_version';"
+--echo # TLSv1.2
+--exec $MYSQL --host=localhost --ssl --tls_version=TLSv1.2 -e "show status like 'ssl_version';"
+--echo # TLSv1.1
+--exec $MYSQL --host=localhost --ssl --tls_version=TLSv1.1 -e "show status like 'ssl_version';"
+--echo # if a gap is between TLS versions, lowest version number should be used (TLS1.1)
+--exec $MYSQL --host=localhost --ssl --tls_version=TLSv1.1,TLSv1.3 -e "show status like 'ssl_version';"
+--echo # TLSv1.3 is not enabled, so TLSv1.2 should be used
+--exec $MYSQL --host=localhost --ssl --tls_version=TLSv1.2,TLSv1.3 -e "show status like 'ssl_version';"
+--echo # Highest TLS version number should be used (TLSv1.2)
+--exec $MYSQL --host=localhost --ssl --tls_version=TLSv1.1,TLSv1.2 -e "show status like 'ssl_version';"
+--echo # TLS v1.0 is no longer supported, an attempt to set it is ignored
+--exec $MYSQL --host=localhost --ssl --tls_version=TLSv1.0 -e "show status like 'ssl_version';"
+--echo # finally list available protocols
+--exec $MYSQL --host=localhost --ssl -e "select @@tls_version;"
+
+call mtr.add_suppression("TLSv1.0 and TLSv1.1 are insecure");
+--let SEARCH_FILE=$MYSQLTEST_VARDIR/log/mysqld.1.err
+--let SEARCH_PATTERN= TLSv1.0 and TLSv1.1 are insecure
+--source include/search_pattern_in_file.inc
+

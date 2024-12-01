@@ -1,0 +1,5 @@
+usr/lib/mysql/plugin/ha_mroonga.so
+usr/share/mariadb/mroonga/AUTHORS
+usr/share/mariadb/mroonga/COPYING
+usr/share/mariadb/mroonga/install.sql
+usr/share/mariadb/mroonga/uninstall.sql

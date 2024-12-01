@@ -1,0 +1,9 @@
+{
+  "type": "key_management",
+  "so_name": "file_key_management",
+  "installable": true,
+  "source_code_type": "core",
+    "core": {
+      "dir_name": "file_key_management"
+    }
+}

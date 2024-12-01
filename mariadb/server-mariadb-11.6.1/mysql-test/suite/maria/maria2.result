@@ -1,0 +1,165 @@
+CREATE TABLE t1 (
+line BLOB,
+kind ENUM('po', 'pp', 'rr', 'dr', 'rd', 'ts', 'cl') NOT NULL DEFAULT 'po',
+name VARCHAR(32)
+) transactional=0 row_format=page engine=aria;
+select count(*) from t1;
+count(*)
+810
+delete from t1 limit 1000;
+select count(*) from t1;
+count(*)
+0
+select name from t1;
+name
+check table t1 extended;
+Table	Op	Msg_type	Msg_text
+test.t1	check	status	OK
+drop table t1;
+create table t1 (i int) engine=aria;
+create table t2 (j int) engine=aria;
+lock table t1 write, t2 read;
+alter table t1 modify i int default 1;
+insert into t1 values (2);
+alter table t1 modify i bigint default 1;
+select count(*) from t1;
+count(*)
+1
+select * from t1;
+i
+2
+unlock tables;
+drop table t1,t2;
+create table t1(id int, s char(1), unique(s)) engine=aria;
+insert into t1 values(1,"a") on duplicate key update t1.id=t1.id+1;
+insert into t1 values(1,"a") on duplicate key update t1.id=t1.id+1;
+insert into t1 select 1,"a" on duplicate key update t1.id=t1.id+1;
+select * from t1;
+id	s
+3	a
+replace into t1 select 1,"a";
+select * from t1;
+id	s
+1	a
+drop table t1;
+create table t1 (pk int primary key, apk int unique, data int) engine=aria;
+insert into t1 values (1, 1, 1), (4, 4, 4), (6, 6, 6);
+load data concurrent infile '../../std_data/loaddata5.dat' replace into table t1 fields terminated by '' enclosed by '' ignore 1 lines (pk, apk);
+Warnings:
+Note	1265	Data truncated for column 'pk' at row 1
+Note	1265	Data truncated for column 'apk' at row 1
+Note	1265	Data truncated for column 'pk' at row 2
+Note	1265	Data truncated for column 'apk' at row 2
+select * from t1 order by pk;
+pk	apk	data
+1	1	1
+3	4	NULL
+5	6	NULL
+load data infile '../../std_data/loaddata5.dat' replace into table t1 fields terminated by '' enclosed by '' ignore 1 lines (pk, apk);
+Warnings:
+Note	1265	Data truncated for column 'pk' at row 1
+Note	1265	Data truncated for column 'apk' at row 1
+Note	1265	Data truncated for column 'pk' at row 2
+Note	1265	Data truncated for column 'apk' at row 2
+select * from t1 order by pk;
+pk	apk	data
+1	1	1
+3	4	NULL
+5	6	NULL
+drop table t1;
+#
+# End of 5.5 tests
+#
+#
+# MDEV-27303 Table corruption after insert into a non-InnoDB table with DESC index
+#
+create table t1 (
+a bigint default 0,
+b bigint default 0,
+c binary(128) not null,
+d datetime default '0000-00-00 00:00:00',
+key (c desc,b,d,a)
+) engine=aria;
+insert into t1 (c) values
+('xx'),('bb'),('tt'),('pp'),('mm'),('yy'),('rr'),('bb'),('yy'),('gg'),
+('dd'),('fx'),('wi'),('ix'),('ox'),('mu'),('ux'),('pm'),('mx'),('xu'),
+('ul'),('lp'),('px'),('lp'),('xx'),('pq'),('qs'),('se'),('ee'),('xx'),
+('rv'),('ff'),('vj'),('jy'),('yn'),('nc'),('nx'),('hj'),('ji'),('ik'),
+('kk'),('ww'),('xx'),('yd'),('dw'),('wk'),('kr'),('dd'),('rj'),('jf'),
+('bx'),('fc'),('cp'),('pm'),('mw'),('wy'),('yl'),('li'),('ic'),('he'),
+('ci'),('il'),('lz'),('zd'),('gz'),('xd'),('ze'),('dm'),('ms'),('xd'),
+('sw'),('we'),('nb'),('tx'),('vr'),('xw'),('aa'),('ah'),('hd'),('jl'),
+('lf'),('fw'),('wx'),('xh'),('hr'),('zx'),('vw'),('rm'),('mx'),('xt'),
+('tp'),('ps'),('sh'),('ga'),('df'),('as'),('gz'),('xd'),('yy'),('xr');
+check table t1 extended;
+Table	Op	Msg_type	Msg_text
+test.t1	check	status	OK
+drop table t1;
+#
+# MDEV-27309 Server crash or ASAN memcpy-param-overlap upon INSERT into Aria/MyISAM table with DESC key
+#
+CREATE TABLE t1 (id INT, c BINARY(80), PRIMARY KEY(id));
+ALTER  TABLE t1 ADD KEY(c DESC, id);
+INSERT INTO t1 VALUES (1,NULL),(2,''),(3,'');
+DROP TABLE t1;
+#
+# MDEV-27330 Wrong sorting order with DESC index and empty strings in MyISAM/Aria table
+#
+create table t (id int, c char(128) not null, key (c desc)) engine=aria;
+insert into t values (1,''),(2,'foo'),(3,''),(4,'bar');
+select c from t order by c;
+c
+
+
+bar
+foo
+drop table t;
+#
+# MDEV-27340 NULL gets lost (becomes empty string), SELECT hangs with DESC index on MyISAM/Aria table
+#
+create table t (c char(8), key(c desc)) engine=aria character set utf8mb4;
+insert into t values (''),('foo'),(null),(''),('bar');
+check table t;
+Table	Op	Msg_type	Msg_text
+test.t	check	status	OK
+check table t extended;
+Table	Op	Msg_type	Msg_text
+test.t	check	status	OK
+select distinct c from t;
+c
+NULL
+
+bar
+foo
+select c from t;
+c
+foo
+bar
+
+
+NULL
+drop table t;
+#
+# MDEV-27434 DESC attribute does not work with auto-increment on secondary column of multi-part index
+#
+create table t (a int auto_increment, b int, unique(b,a desc)) engine=aria;
+insert ignore into t (b) values (10),(10),(10);
+select * from t;
+a	b
+3	10
+2	10
+1	10
+drop table t;
+#
+# MDEV-27585 Auto-increment on secondary column increments unexpectedly with DESC key
+#
+create table t (c char(16), i int auto_increment, index (c,i desc)) engine=aria collate latin1_swedish_ci;
+insert into t (c) values ('ä'),('a');
+select hex(c),c,i from t order by c, i;
+hex(c)	c	i
+61	a	1
+C3A4	ä	1
+drop table t;
+#
+# End of 10.8 tests
+#

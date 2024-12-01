@@ -1,0 +1,187 @@
+#
+# Purpose:
+#   This test validates that a slave's relay log format description event is
+# not used to calculate the Seconds_Behind_Master time displayed by
+# SHOW SLAVE STATUS.
+#
+# Methodology:
+#   Ensure that a slave's reported Seconds_Behind_Master does not point before
+# a time in which we can prove that it has progressed beyond. The slave's
+# relay log events are created using the timestamp at which the IO thread was
+# created. Therefore, after starting the slave's IO thread, we sleep so any
+# proceeding events are forced to have later timestamps. After sleeping, we run
+# MDL statements on the master and save the time at which they are binlogged.
+# Once the slave executes these MDL commands, we have proven that the slave has
+# caught up to this saved timestamp. At this point, if the value of
+# Seconds_Behind_Master points before the time in which the MDL events were
+# logged, it is invalid.
+#
+# References:
+#   MDEV-16091: Seconds_Behind_Master spikes to millions of seconds
+#
+--source include/have_debug.inc
+--source include/have_debug_sync.inc
+--source include/have_innodb.inc
+--source include/master-slave.inc
+
+--connection slave
+
+# Using_Gtid needs to start as NO before updating debug_dbug
+--source include/stop_slave.inc
+CHANGE MASTER TO MASTER_USE_GTID=NO;
+--source include/start_slave.inc
+
+--source include/stop_slave.inc
+SET @save_dbug= @@GLOBAL.debug_dbug;
+SET @@global.debug_dbug="+d,pause_sql_thread_on_relay_fde_after_trans";
+SET @@global.debug_dbug="+d,negate_clock_diff_with_master";
+--source include/start_slave.inc
+
+--let $sleep_time=2
+--echo # Future events must be logged at least $sleep_time seconds after
+--echo # the slave starts
+--sleep $sleep_time
+
+--connection master
+--echo # Write events to ensure slave will be consistent with master
+create table t1 (a int);
+insert into t1 values (1);
+--let $t_master_events_logged= `SELECT UNIX_TIMESTAMP()`
+
+--echo # Flush logs on master forces slave to generate a Format description
+--echo # event in its relay log
+flush logs;
+
+--connection slave
+--echo # On the next FDE, the slave should have the master CREATE/INSERT events
+SET DEBUG_SYNC='now WAIT_FOR paused_on_fde';
+select count(*)=1 from t1;
+
+--echo # The relay log FDE has been processed - here we check to ensure it was
+--echo # not considered in Seconds_Behind_Master calculation
+--connection slave1
+let $sbm= query_get_value(SHOW SLAVE STATUS, Seconds_Behind_Master, 1);
+--let $t_now= `SELECT UNIX_TIMESTAMP()`
+
+# Ensure Seconds_Behind_Master does not point beyond when we have proven the
+# events we have proven to have executed. The extra second is needed as a
+# buffer because the recorded times are not exact with when the events were
+# recorded on the master.
+if(`select $sbm > $t_now - $t_master_events_logged + 1`)
+{
+    die "A relay log event was incorrectly used to set Seconds_Behind_Master";
+}
+
+--echo # Safely resume slave SQL thread
+
+--let $dbug_wait_state="debug sync point: now"
+--echo # Prove SQL thread is in state $dbug_wait_state
+--let $wait_condition= SELECT STATE=$dbug_wait_state from information_schema.PROCESSLIST where COMMAND="Slave_SQL"
+--source include/wait_condition.inc
+
+SET @@global.debug_dbug="-d,pause_sql_thread_on_fde";
+SET DEBUG_SYNC='now SIGNAL sql_thread_continue';
+
+# We have to wait for the SQL thread to acknowledge the sql_thread_continue
+# signal. Otherwise the below RESET command can overwrite the signal before
+# the SQL thread is notified to proceed, causing it to "permanently" become
+# stuck awaiting the signal (until timeout is reached).
+
+--echo # Wait for SQL thread to continue into normal execution
+--let $wait_condition= SELECT STATE!= $dbug_wait_state from information_schema.PROCESSLIST where COMMAND="Slave_SQL"
+--source include/wait_condition.inc
+
+# Reset last sql_thread_continue signal
+SET DEBUG_SYNC='RESET';
+
+
+--echo #
+--echo # MDEV-29639
+--echo # When receiving an event after the SQL Thread idles,
+--echo # Seconds_Behind_Master should not update before it updates
+--echo # last_master_timestamp
+
+--connection slave
+--source include/stop_slave.inc
+set @@global.debug_dbug="+d,pause_sql_thread_on_next_event";
+--source include/start_slave.inc
+
+--connection master
+insert into t1 values(2);
+--source include/save_master_gtid.inc
+
+# Each event after starting will trigger a pause, so continually send signal
+# sql_thread_continue until caught up
+--connection slave
+--let $caught_up=0
+--let $tries= 0
+set debug_sync='now wait_for paused_on_event';
+--disable_query_log
+while (!$caught_up)
+{
+    set debug_sync='now signal sql_thread_continue';
+    --let $slave_gtid= `SELECT @@global.gtid_slave_pos`
+    if (`SELECT strcmp("$master_pos","$slave_gtid") = 0`)
+    {
+        --inc $caught_up
+    }
+    --inc $tries
+    # Wait 30s
+    if (`SELECT $tries > 300`)
+    {
+        --die Replica failed to sync with primary
+    }
+    sleep 0.1;
+}
+set debug_sync="RESET";
+--enable_query_log
+
+--connection master
+--echo # Sleeping 1s to create a visible SBM gap between events
+sleep 1;
+insert into t1 values(3);
+--source include/save_master_gtid.inc
+
+--connection slave
+set debug_sync='now wait_for paused_on_event';
+--let $sbm= query_get_value(SHOW SLAVE STATUS, Seconds_Behind_Master, 1)
+
+if ($sbm)
+{
+    --echo # Expected Seconds_Behind_Master to be 0 but was $sbm
+    --die Seconds_Behind_Master should not show updates before last_master_timestamp is updated
+}
+
+# Continually send signal sql_thread_continue until caught up
+--let $caught_up=0
+--let $tries= 0
+--disable_query_log
+while (!$caught_up)
+{
+    set debug_sync='now signal sql_thread_continue';
+    --let $slave_gtid= `SELECT @@global.gtid_slave_pos`
+    if (`SELECT strcmp("$master_pos","$slave_gtid") = 0`)
+    {
+        --inc $caught_up
+    }
+    --inc $tries
+    # Wait 30s
+    if (`SELECT $tries > 300`)
+    {
+        --die Replica failed to sync with primary
+    }
+    sleep 0.1;
+}
+--enable_query_log
+
+# Cleanup
+--source include/stop_slave.inc
+set debug_sync='RESET';
+SET @@global.debug_dbug=$save_dbug;
+--source include/start_slave.inc
+--source include/sync_with_master_gtid.inc
+
+--connection master
+DROP TABLE t1;
+
+--source include/rpl_end.inc

@@ -1,0 +1,65 @@
+#
+# Test progress output during IST
+#
+
+--source include/galera_cluster.inc
+
+# Isolate node #2 
+--connection node_2
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 1';
+
+--connection node_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--connection node_2
+SET SESSION wsrep_on = OFF;
+--let $wait_condition = SELECT VARIABLE_VALUE = 'non-Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
+--source include/wait_condition.inc
+SET SESSION wsrep_on = ON;
+
+# Node #2 is now isolated. Run some transactions to accumulate writesets for IST
+
+--connection node_1
+CREATE TABLE t1 (f1 INTEGER NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+INSERT INTO t1 VALUES (1);
+INSERT INTO t1 VALUES (2);
+INSERT INTO t1 VALUES (3);
+INSERT INTO t1 VALUES (4);
+INSERT INTO t1 VALUES (5);
+INSERT INTO t1 VALUES (6);
+INSERT INTO t1 VALUES (7);
+INSERT INTO t1 VALUES (8);
+INSERT INTO t1 VALUES (9);
+INSERT INTO t1 VALUES (10);
+
+# Restore node #2, IST is performed
+
+--connection node_2
+SET GLOBAL wsrep_provider_options = 'gmcast.isolate = 0';
+
+--connection node_1
+--let $wait_condition = SELECT VARIABLE_VALUE = 2 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_size';
+--source include/wait_condition.inc
+
+--connection node_2
+--let $wait_condition = SELECT VARIABLE_VALUE = 'Primary' FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_cluster_status';
+--source include/wait_condition.inc
+
+#
+# sed for expected IST output in joiner log
+#
+
+--connection node_1
+
+# Grep is not safe always and we are interested that there is at least one progress report (there can be more)
+let $MYSQLD_DATADIR= `SELECT @@datadir`;
+--echo "Trying to find IST progress reporting"
+--exec sed -ne 's/.*Receiving IST.*/found/p' $MYSQLD_DATADIR/../../log/mysqld.2.err | tail -1
+
+# Cleanup
+
+--connection node_1
+DROP TABLE t1;

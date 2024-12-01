@@ -1,0 +1,11 @@
+--- a/mysql-test/suite/sys_vars/r/sysvars_debug.result
++++ b/mysql-test/suite/sys_vars/r/sysvars_debug.result
+@@ -22,7 +22,7 @@
+ GLOBAL_VALUE_ORIGIN	COMMAND-LINE
+ DEFAULT_VALUE	0
+ VARIABLE_SCOPE	GLOBAL
+-VARIABLE_TYPE	BIGINT UNSIGNED
++VARIABLE_TYPE	INT UNSIGNED
+ VARIABLE_COMMENT	Extra sleep (in microseconds) to add to binlog fsync(), for debugging
+ NUMERIC_MIN_VALUE	0
+ NUMERIC_MAX_VALUE	4294967295

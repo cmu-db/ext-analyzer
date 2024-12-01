@@ -1,0 +1,6 @@
+ed25519
+gssapi
+mysql_native_password
+mysql_old_password
+pam
+unix_socket

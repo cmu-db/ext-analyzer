@@ -1,0 +1,8 @@
+{
+  "type": "replication",
+  "installable": false,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "versioning"
+  }
+}

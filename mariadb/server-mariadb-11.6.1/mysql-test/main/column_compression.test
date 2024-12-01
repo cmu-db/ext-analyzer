@@ -1,0 +1,485 @@
+--source include/have_innodb.inc
+--source include/have_csv.inc
+--source include/have_normal_zlib.inc
+
+let $MYSQLD_DATADIR= `select @@datadir`;
+
+SET column_compression_zlib_wrap=true;
+let $typec= BLOB COMPRESSED;
+let $typeu= BLOB;
+--source column_compression.inc
+
+
+let $typec= TEXT COMPRESSED;
+let $typeu= TEXT;
+--source column_compression.inc
+
+let $typec= TEXT COMPRESSED CHARACTER SET latin1;
+let $typeu= TEXT CHARACTER SET latin1;
+--source column_compression.inc
+
+let $typec= VARBINARY(10000) COMPRESSED;
+let $typeu= VARBINARY(10000);
+--source column_compression.inc
+
+let $typec= VARCHAR(10000) COMPRESSED CHARACTER SET latin1;
+let $typeu= VARCHAR(10000) CHARACTER SET latin1;
+--source column_compression.inc
+
+let $typec= TEXT COMPRESSED CHARSET ucs2;
+let $typeu= TEXT CHARACTER SET latin1;
+--source column_compression.inc
+
+SET column_compression_zlib_wrap=DEFAULT;
+let $typec= BLOB COMPRESSED;
+let $typeu= BLOB;
+--source column_compression.inc
+
+--enable_prepare_warnings
+--error ER_PARSE_ERROR
+CREATE TABLE t1(a CHAR(100) COMPRESSED);
+--error ER_PARSE_ERROR
+CREATE TABLE t1(a CHAR(100) NOT NULL COMPRESSED);
+--error ER_PARSE_ERROR
+CREATE TABLE t1(a INT COMPRESSED);
+--error ER_UNKNOWN_COMPRESSION_METHOD
+CREATE TABLE t1(a BLOB COMPRESSED=unknown);
+--error ER_PARSE_ERROR
+CREATE TABLE t1(a BLOB COMPRESSED COMPRESSED);
+CREATE TABLE t1(a INT);
+--error ER_PARSE_ERROR
+ALTER TABLE t1 MODIFY a INT COMPRESSED;
+--error ER_PARSE_ERROR
+ALTER TABLE t1 MODIFY a INT NOT NULL COMPRESSED;
+DROP TABLE t1;
+
+--echo # Test CSV
+CREATE TABLE t1(a BLOB COMPRESSED NOT NULL) ENGINE=CSV;
+INSERT INTO t1 VALUES(REPEAT('a', 110));
+SELECT LENGTH(a) FROM t1;
+ALTER TABLE t1 ENGINE=MyISAM;
+SELECT LENGTH(a) FROM t1;
+ALTER TABLE t1 ENGINE=CSV;
+SELECT LENGTH(a) FROM t1;
+SHOW CREATE TABLE t1;
+--cat_file $MYSQLD_DATADIR/test/t1.CSV
+DROP TABLE t1;
+
+--echo # Test fields that don't fit data
+CREATE TABLE t1(a VARCHAR(9) COMPRESSED) CHARSET=latin1;
+--error ER_DATA_TOO_LONG
+INSERT INTO t1 VALUES(REPEAT('a', 10));
+INSERT INTO t1 VALUES(REPEAT(' ', 10));
+SELECT a, LENGTH(a) FROM t1;
+DROP TABLE t1;
+
+CREATE TABLE t1(a TINYTEXT COMPRESSED) CHARSET=latin1;
+SET column_compression_threshold=300;
+INSERT INTO t1 VALUES(REPEAT('a', 254));
+INSERT INTO t1 VALUES(REPEAT(' ', 254));
+--error ER_DATA_TOO_LONG
+INSERT INTO t1 VALUES(REPEAT('a', 255));
+INSERT INTO t1 VALUES(REPEAT(' ', 255));
+--error ER_DATA_TOO_LONG
+INSERT INTO t1 VALUES(REPEAT('a', 256));
+INSERT INTO t1 VALUES(REPEAT(' ', 256));
+--error ER_DATA_TOO_LONG
+INSERT INTO t1 VALUES(REPEAT('a', 257));
+INSERT INTO t1 VALUES(REPEAT(' ', 257));
+SET column_compression_threshold=DEFAULT;
+SELECT LEFT(a, 10), LENGTH(a) FROM t1 ORDER BY 1;
+DROP TABLE t1;
+
+--echo # Corner case: VARCHAR(255) COMPRESSED must have 2 bytes pack length
+CREATE TABLE t1(a VARCHAR(255) COMPRESSED) CHARSET=latin1;
+SHOW CREATE TABLE t1;
+SET column_compression_threshold=300;
+INSERT INTO t1 VALUES(REPEAT('a', 255));
+SET column_compression_threshold=DEFAULT;
+SELECT a, LENGTH(a) FROM t1;
+DROP TABLE t1;
+
+CREATE TABLE t1(a VARCHAR(65531) COMPRESSED) CHARSET=latin1;
+SET column_compression_threshold=65537;
+INSERT INTO t1 VALUES(REPEAT('a', 65530));
+INSERT INTO t1 VALUES(REPEAT(' ', 65530));
+INSERT INTO t1 VALUES(REPEAT('a', 65531));
+INSERT INTO t1 VALUES(REPEAT(' ', 65531));
+--error ER_DATA_TOO_LONG
+INSERT INTO t1 VALUES(REPEAT('a', 65532));
+INSERT INTO t1 VALUES(REPEAT(' ', 65532));
+--error ER_DATA_TOO_LONG
+INSERT INTO t1 VALUES(REPEAT('a', 65533));
+INSERT INTO t1 VALUES(REPEAT(' ', 65533));
+SET column_compression_threshold=DEFAULT;
+SELECT LEFT(a, 10), LENGTH(a) FROM t1 ORDER BY 1, 2;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-14929 - AddressSanitizer: memcpy-param-overlap in
+--echo #              Field_longstr::compress
+--echo #
+CREATE TABLE t1(b BLOB COMPRESSED);
+INSERT INTO t1 VALUES('foo'),('bar');
+SET SESSION optimizer_switch = 'derived_merge=off';
+SELECT * FROM ( SELECT * FROM t1 ) AS sq ORDER BY b;
+SET SESSION optimizer_switch=DEFAULT;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-15762 - VARCHAR(0) COMPRESSED crashes the server
+--echo #
+CREATE TABLE t1(a VARCHAR(0) COMPRESSED) CHARSET=latin1;
+--error ER_DATA_TOO_LONG
+INSERT INTO t1 VALUES('a');
+INSERT INTO t1 VALUES(' ');
+SELECT LENGTH(a) FROM t1;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-15763 - VARCHAR(1) COMPRESSED crashes the server
+--echo #
+CREATE TABLE t1(a VARCHAR(1) COMPRESSED) CHARSET=latin1;
+SET column_compression_threshold=0;
+INSERT INTO t1 VALUES('a');
+SET column_compression_threshold=DEFAULT;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-15938 - TINYTEXT CHARACTER SET utf8 COMPRESSED truncates data
+--echo #
+CREATE TABLE t1(a TINYTEXT COMPRESSED, b TINYTEXT) CHARACTER SET utf8;
+INSERT INTO t1 VALUES (REPEAT(_latin1'a', 254), REPEAT(_latin1'a', 254));
+SELECT CHAR_LENGTH(a), CHAR_LENGTH(b), LEFT(a, 10), LEFT(b, 10) FROM t1;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-16134 Wrong I_S.COLUMNS.CHARACTER_XXX_LENGTH value for compressed columns
+--echo #
+
+CREATE TABLE t1
+(
+  a VARCHAR(10) COMPRESSED CHARACTER SET latin1,
+  b VARCHAR(10) COMPRESSED CHARACTER SET utf8
+) CHARSET=latin1;
+SELECT COLUMN_NAME, CHARACTER_MAXIMUM_LENGTH, CHARACTER_OCTET_LENGTH
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA='test' AND TABLE_NAME='t1' AND COLUMN_NAME IN ('a','b')
+ORDER BY COLUMN_NAME;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-15592 - Column COMPRESSED should select a 'high order' datatype
+--echo #
+CREATE TABLE t1(a TINYTEXT COMPRESSED) CHARSET=latin1;
+INSERT INTO t1 VALUES(REPEAT('a', 255));
+SELECT LEFT(a, 10), LENGTH(a) FROM t1;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-16729 VARCHAR COMPRESSED is created with a wrong length for multi-byte character sets
+--echo #
+
+CREATE OR REPLACE TABLE t1 (a VARCHAR(1000) COMPRESSED CHARACTER SET utf8);
+SHOW CREATE TABLE t1;
+SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA='test' AND TABLE_NAME='t1';
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-17363 - Compressed columns cannot be restored from dump
+--echo #
+--error ER_PARSE_ERROR
+CREATE TABLE t1(a INT NOT NULL COMPRESSED);
+SHOW WARNINGS;
+
+CREATE TABLE t1(
+  a JSON COMPRESSED,
+  b VARCHAR(1000) COMPRESSED BINARY,
+  c NVARCHAR(1000) COMPRESSED BINARY,
+  d TINYTEXT COMPRESSED BINARY
+);
+SHOW CREATE TABLE t1;
+DROP TABLE t1;
+
+
+--echo #
+--echo # VARCHAR and TEXT variants
+--echo #
+
+--let type=VARCHAR(10)
+--source include/column_compression_syntax_varchar.inc
+
+--let type=TINYTEXT
+--source include/column_compression_syntax_varchar.inc
+
+--let type=TEXT
+--source include/column_compression_syntax_varchar.inc
+
+--let type=MEDIUMTEXT
+--source include/column_compression_syntax_varchar.inc
+
+--let type=LONGTEXT
+--source include/column_compression_syntax_varchar.inc
+
+
+--echo #
+--echo # VARBINARY and BLOB variables
+--echo #
+
+--let type=VARCHAR(10)
+--source include/column_compression_syntax_varbinary.inc
+
+--let type=TINYBLOB
+--source include/column_compression_syntax_varbinary.inc
+
+--let type=BLOB
+--source include/column_compression_syntax_varbinary.inc
+
+--let type=MEDIUMBLOB
+--source include/column_compression_syntax_varbinary.inc
+
+--let type=LONGBLOB
+--source include/column_compression_syntax_varbinary.inc
+
+
+--echo #
+--echo # NVARCHAR
+--echo #
+
+CREATE TABLE t1 (a NVARCHAR(10) COMPRESSED);
+SHOW CREATE TABLE t1;
+DROP TABLE t1;
+--error ER_PARSE_ERROR
+CREATE TABLE t1 (a NVARCHAR(10) COMPRESSED BINARY COMPRESSED);
+--error ER_PARSE_ERROR
+CREATE TABLE t1 (a NVARCHAR(10) COMPRESSED DEFAULT '' COMPRESSED);
+
+--echo #
+--echo # MDEV-21348 - Memory leak in Storage-Engine Independent Column
+--echo #              Compression
+--echo #
+CREATE TABLE t1(a BLOB COMPRESSED);
+SET column_compression_threshold=0;
+INSERT INTO t1 VALUES('aa');
+SET column_compression_threshold=DEFAULT;
+DROP TABLE t1;
+
+
+--echo #
+--echo # MDEV-31724 Compressed varchar values lost on joins when sorting on columns from joined table(s)
+--echo #
+
+CREATE TABLE t1 (
+  id  int(10) unsigned not null,
+  txt varchar(5000) COMPRESSED NOT NULL DEFAULT '',
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+
+CREATE TABLE t2 (
+  id int(10) unsigned not null,
+  n1 bigint(20) NOT NULL,
+  n2 bigint(20) NOT NULL,
+  n3 bigint(20) NOT NULL,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_bin;
+
+INSERT INTO t1 VALUES
+(1, 'short string < 100 chars'),
+(2, 'long string =  99 chars                                                                            '),
+(3, 'long string = 100 chars                                                                            !'),
+(4, 'long string = 101 chars                                                                             !');
+
+INSERT INTO t2 VALUES
+(1, 24, 1, 1),
+(2, 99, 2, 2),
+(3, 100, 3, 3),
+(4, 101, 4, 4);
+
+SELECT txt, v.* FROM t1 LEFT JOIN t2 v ON t1.id = v.id;
+SELECT txt, v.* FROM t1 LEFT JOIN t2 v ON t1.id = v.id ORDER BY v.n1;
+SELECT txt, v.* FROM t1 JOIN t2 v ON t1.id = v.id;
+SELECT txt, v.* FROM t1 JOIN t2 v ON t1.id = v.id ORDER BY v.n1;
+
+DROP TABLE t1, t2;
+
+CREATE OR REPLACE TABLE t1 (
+  id INT NOT NULL PRIMARY KEY,
+  txt varchar(5000) COMPRESSED NOT NULL DEFAULT ''
+) CHARSET=utf8mb3;
+
+INSERT INTO t1 VALUES
+(1, REPEAT('a', 10)),
+(2, REPEAT('b', 99)),
+(3, REPEAT('c', 100)),
+(4, REPEAT('d', 121));
+
+--replace_column 2 <sysdate>
+--sorted_result
+SELECT txt, sysdate(6) FROM t1 ORDER BY 2;
+DROP TABLE t1;
+
+
+DELIMITER $$;
+CREATE FUNCTION f1(imax INT, jmax INT) RETURNS TEXT
+BEGIN
+  DECLARE res TEXT DEFAULT 'x';
+  FOR i IN 0..imax
+  DO
+    FOR j IN 0..jmax
+    DO
+      SET res=CONCAT(res, ' ', i, ' ', j);
+    END FOR;
+  END FOR;
+  RETURN res;
+END;
+$$
+DELIMITER ;$$
+
+
+# Let's override the default threshold (100) to force
+# comression for VARCHAR1+MB, for example, for:
+# VARCHAR(80) CHARACTER SET utf8mb3
+
+SET @@column_compression_threshold=32;
+
+--echo # VARCHAR1, 8bit, truncation
+CREATE TABLE t1 (a VARCHAR(254) COMPRESSED CHARACTER SET latin1);
+INSERT INTO t1 VALUES (f1(6,6));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(4) COMPRESSED CHARACTER SET latin1;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), a FROM t1;
+DROP TABLE t1;
+
+CREATE TABLE t1 (a VARCHAR(254) COMPRESSED CHARACTER SET latin1);
+INSERT INTO t1 VALUES (REPEAT('a',254));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(4) COMPRESSED CHARACTER SET latin1;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), a FROM t1;
+DROP TABLE t1;
+
+--echo # VARCHAR1, 8bit, no truncation
+CREATE TABLE t1 (a VARCHAR(250) COMPRESSED CHARACTER SET latin1);
+INSERT INTO t1 VALUES (f1(6,6));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(254) COMPRESSED CHARACTER SET latin1;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+DROP TABLE t1;
+
+--echo # VARCHAR2, 8bit, truncation
+CREATE TABLE t1 (a VARCHAR(32000) COMPRESSED CHARACTER SET latin1);
+INSERT INTO t1 VALUES (f1(31,31));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(256) COMPRESSED CHARACTER SET latin1;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+DROP TABLE t1;
+
+--echo # VARCHAR2, 8bit, no truncation
+CREATE TABLE t1 (a VARCHAR(32000) COMPRESSED CHARACTER SET latin1);
+INSERT INTO t1 VALUES (f1(31,31));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a, 30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(32001) COMPRESSED CHARACTER SET latin1;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a, 30) FROM t1;
+DROP TABLE t1;
+
+--echo # VARCHAR1, multi-byte, truncation
+CREATE TABLE t1 (a VARCHAR(80) COMPRESSED CHARACTER SET utf8mb3);
+INSERT INTO t1 VALUES (f1(3,3));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(1) COMPRESSED CHARACTER SET utf8mb3;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), a FROM t1;
+DROP TABLE t1;
+
+--echo # VARCHAR1, multi-byte, no truncation
+CREATE TABLE t1 (a VARCHAR(80) COMPRESSED CHARACTER SET utf8mb3);
+INSERT INTO t1 VALUES (f1(3,3));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(81) COMPRESSED CHARACTER SET utf8mb3;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+DROP TABLE t1;
+
+--echo # VARCHAR2, multi-byte, truncation
+CREATE TABLE t1 (a VARCHAR(10000) COMPRESSED CHARACTER SET utf8mb3);
+INSERT INTO t1 VALUES (f1(31,31));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(256) COMPRESSED CHARACTER SET utf8mb3;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+DROP TABLE t1;
+
+--echo # VARCHAR2, multi-byte, no truncation
+CREATE TABLE t1 (a VARCHAR(10000) COMPRESSED CHARACTER SET utf8mb3);
+INSERT INTO t1 VALUES (f1(31,31));
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+FLUSH STATUS;
+ALTER IGNORE TABLE t1 MODIFY a VARCHAR(10001) COMPRESSED CHARACTER SET utf8mb3;
+SHOW STATUS LIKE 'Column%compressions';
+SELECT LENGTH(a), LEFT(a,30), RIGHT(a,30) FROM t1;
+DROP TABLE t1;
+
+SET @@column_compression_threshold=DEFAULT;
+
+DROP FUNCTION f1;
+
+--echo #
+--echo # MDEV-24797 Column Compression - ERROR 1265 (01000): Data truncated for column
+--echo #
+
+CREATE TABLE t1 (a VARCHAR(500) COMPRESSED CHARACTER SET utf8mb3) ENGINE=MyISAM;
+INSERT INTO t1 SET a=REPEAT('x',127);
+ALTER TABLE t1 FORCE, ALGORITHM=COPY;
+DROP TABLE t1;
+
+CREATE TABLE t1 (a VARCHAR(500) COMPRESSED CHARACTER SET utf8mb3) ENGINE=InnoDB;
+INSERT INTO t1 SET a=REPEAT('x',127);
+ALTER TABLE t1 FORCE, ALGORITHM=COPY;
+DROP TABLE t1;
+
+
+--echo #
+--echo # End of 10.4 tests
+--echo #
+
+--echo #
+--echo # MDEV-19727 Add Type_handler::Key_part_spec_init_ft
+--echo #
+
+#
+# Indexes on COMPRESSED columns are generally prohibited, so we don't have
+# to override Type_handler_xxx_compressed::Key_part_spec_init_ft().
+# Note, we could support FULLTEXT indexes on compressed columns eventually.
+#
+
+--error ER_COMPRESSED_COLUMN_USED_AS_KEY
+CREATE TABLE t1 (a VARCHAR(1000) COMPRESSED, FULLTEXT INDEX(a));
+
+--error ER_COMPRESSED_COLUMN_USED_AS_KEY
+CREATE TABLE t1 (a TEXT COMPRESSED, FULLTEXT INDEX(a));
+
+--disable_prepare_warnings
+--echo #
+--echo # End of 10.5 tests
+--echo #

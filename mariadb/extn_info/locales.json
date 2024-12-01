@@ -1,0 +1,9 @@
+{
+  "type": "information_schema",
+  "so_name": "locales",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "locale_info"
+  }
+}

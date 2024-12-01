@@ -1,0 +1,40 @@
+#
+# MDEV-4265 5.5 is slower than 5.3 because of many str_to_datetime calls
+#
+--source include/have_debug.inc
+
+create table t1 (a date);
+insert t1 values ('2000-01-02'), ('2001-02-03'), ('2002-03-04');
+
+SET STATEMENT debug_dbug='d,str_to_datetime_warn' for
+	select * from t1 where a > date_add('2000-01-01', interval 5 day);
+drop table t1;
+
+#
+# MDEV-9707 MAX(timestamp(6) column) in correlated sub-query returns non-existent row data in original table
+#
+create table t1 (id int not null, ut timestamp(6) not null);
+insert into t1 values(1, '2001-01-01 00:00:00.2');
+insert into t1 values(1, '2001-01-01 00:00:00.1');
+select * from t1;
+select (select max(m2.ut) from t1 m2 where m1.id <> 0) from t1 m1;
+drop table t1;
+
+--echo #
+--echo # MDEV-30345 DML does not find rows it is supposed to
+--echo #
+
+CREATE TABLE t1 (f timestamp);
+INSERT INTO t1 VALUES ('2022-01-01 00:00:00'),('2022-12-12 12:12:12');
+
+CREATE TABLE t2 (f timestamp);
+INSERT INTO t2 VALUES ('2022-01-01 00:00:00'),('2022-12-12 12:12:12');
+
+SELECT * FROM t2 WHERE f IN ( SELECT f FROM t1 ) ;
+DELETE FROM t2 WHERE f IN ( SELECT f FROM t1 ) ;
+SELECT * FROM t2 WHERE f IN ( SELECT f FROM t1 ) ;
+DROP TABLE t1,t2;
+
+--echo #
+--echo # End of 10.4 tests
+--echo #

@@ -1,0 +1,9 @@
+{
+  "type": "function",
+  "installation": "default",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "type_inet"
+  }
+}

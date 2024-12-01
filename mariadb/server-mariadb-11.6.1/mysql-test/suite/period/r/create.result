@@ -1,0 +1,165 @@
+create table t (id int primary key, s date, e date, period for mytime(s,e));
+# CONSTRAINT CHECK (s < e) is added implicitly, and shouldn't be shown
+# this is important for correct command-based replication
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `s` date NOT NULL,
+  `e` date NOT NULL,
+  PERIOD FOR `mytime` (`s`, `e`),
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+create view v as select * from t;
+select * from information_schema.periods;
+TABLE_CATALOG	TABLE_SCHEMA	TABLE_NAME	PERIOD	START_COLUMN_NAME	END_COLUMN_NAME
+def	test	t	mytime	s	e
+Warnings:
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+select * from information_schema.key_period_usage;
+CONSTRAINT_CATALOG	CONSTRAINT_SCHEMA	CONSTRAINT_NAME	TABLE_CATALOG	TABLE_SCHEMA	TABLE_NAME	PERIOD_NAME
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+Warnings:
+drop view v;
+create or replace table t (id int primary key, s timestamp(6), e timestamp(6),
+period for mytime(s,e));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `s` timestamp(6) NOT NULL,
+  `e` timestamp(6) NOT NULL,
+  PERIOD FOR `mytime` (`s`, `e`),
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+# SQL16, Part 2, 11.3  <table definition>, Syntax Rules, 2)a)
+# 2) If a <table period definition> TPD is specified, then:
+# a) <table scope> shall not be specified.
+create or replace temporary table t (s date, e date, period for mytime(s,e));
+ERROR HY000: Application-time period table cannot be temporary
+# SQL16, Part 2, 11.3  <table definition>, Syntax Rules, 2)e)iii)
+# The <data type or domain name> contained in CD1 is either DATE or a
+# timestamp type and it is equivalent to the <data type or domain name>
+# contained in CD2.
+create or replace table t (id int primary key, s datetime, e date,
+period for mytime(s,e));
+ERROR HY000: Fields of PERIOD FOR `mytime` have different types
+create or replace table t (s timestamp(2), e timestamp(6),
+period for mytime(s,e));
+ERROR HY000: Fields of PERIOD FOR `mytime` have different types
+create or replace table t (id int primary key, s int, e date,
+period for mytime(s,e));
+ERROR 42000: Incorrect column specifier for column 's'
+create or replace table t (id int primary key, s time, e time,
+period for mytime(s,e));
+ERROR 42000: Incorrect column specifier for column 's'
+create or replace table t (id int primary key, s date, e date,
+period for mytime(s,x));
+ERROR 42S22: Unknown column 'x' in 'mytime'
+# MDEV-18842: Unfortunate error message when the same column is used
+# for application period start and end
+create or replace table t (s date, t date, period for apt(s,s));
+ERROR 42000: Column 's' specified twice
+create or replace table t (id int primary key, s date, e date,
+period for mytime(s,e),
+period for mytime2(s,e));
+ERROR HY000: Cannot specify more than one application-time period
+# SQL16, Part 2, 11.3  <table definition>, Syntax Rules, 2)d)
+# No <column name> in any <column definition> shall be equivalent to PN.
+create or replace table t (mytime int, s date, e date,
+period for mytime(s,e));
+ERROR 42S21: Duplicate column name 'mytime'
+# SQL16, Part 2, 11.3  <table definition>, Syntax Rules, 2)e)v)2)A)
+# Neither CD1 nor CD2 shall contain an <identity column specification>, a
+# <generation clause>, a <system time period start column specification>,
+#  or a <system time period end column specification>.
+create or replace table t (id int primary key,
+s date,
+e date generated always as (s+1),
+period for mytime(s,e));
+ERROR HY000: Period field `e` cannot be GENERATED ALWAYS AS
+create or replace table t (id int primary key,
+s date,
+e date as (s+1) VIRTUAL,
+period for mytime(s,e));
+ERROR HY000: Period field `e` cannot be GENERATED ALWAYS AS
+create or replace table t (id int primary key, s timestamp(6), e timestamp(6),
+st timestamp(6) as row start,
+en timestamp(6) as row end,
+period for system_time (st, en),
+period for mytime(st,e)) with system versioning;
+ERROR HY000: Period field `st` cannot be GENERATED ALWAYS AS
+# SQL16, Part 2, 11.3  <table definition>, Syntax Rules, 2)
+# Let IDCN be an implementation-dependent <constraint name> that is not
+# equivalent to the <constraint name> of any table constraint descriptor
+# included in S.
+create or replace table t (x int, s date, e date,
+period for mytime(s, e),
+constraint mytime check (x > 1));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `x` int(11) DEFAULT NULL,
+  `s` date NOT NULL,
+  `e` date NOT NULL,
+  PERIOD FOR `mytime` (`s`, `e`),
+  CONSTRAINT `mytime` CHECK (`x` > 1)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+insert t values (2, '2001-01-01', '2001-01-01');
+ERROR 23000: CONSTRAINT `mytime_1` failed for `test`.`t`
+show status like "Feature_application_time_periods";
+Variable_name	Value
+Feature_application_time_periods	6
+drop table t;
+# MDEV-29387: Period name with more than 32 symbols crashes the server
+#
+# test 34 symbols
+create table t2 (s date, e date, 
+period for `abcd123456789012345678901234567890` (s,e));
+drop table t2;
+# test 64 symbols
+create table t2 (s date, e date, period for 
+`abcd123456789012345678901234567890123456789012345678901234567890`
+                 (s,e));
+drop table t2;
+# MDEV-32205 Server crashes in get_schema_key_period_usage_record on
+# server without InnoDB
+# Make sure innodb id disabled, but there's at least one innodb table
+select "yes" from information_schema.tables where engine="innodb" limit 1;
+yes
+yes
+select plugin_status from information_schema.all_plugins where plugin_name = "innodb";
+plugin_status
+DISABLED
+select * from information_schema.periods;
+TABLE_CATALOG	TABLE_SCHEMA	TABLE_NAME	PERIOD	START_COLUMN_NAME	END_COLUMN_NAME
+select * from information_schema.key_period_usage;
+CONSTRAINT_CATALOG	CONSTRAINT_SCHEMA	CONSTRAINT_NAME	TABLE_CATALOG	TABLE_SCHEMA	TABLE_NAME	PERIOD_NAME
+# [DUPLICATE] MDEV-32204 Server crashes in
+# get_schema_key_period_usage_record
+create table t (a date) engine=myisam;
+create table  t1 (a int) engine=merge union = (t) ;
+select 1 from information_schema.key_period_usage;
+1
+Warning	1168	Unable to open underlying table which is differently defined or of non-MyISAM type or doesn't exist
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+Warnings:
+drop table t1;
+drop table t;
+create view v1 as select 1;
+create view v2 as select * from v1;
+drop view v1;
+select * from information_schema.key_period_usage;
+CONSTRAINT_CATALOG	CONSTRAINT_SCHEMA	CONSTRAINT_NAME	TABLE_CATALOG	TABLE_SCHEMA	TABLE_NAME	PERIOD_NAME
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1356	View 'test.v2' references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them
+Warnings:
+drop view v2;

@@ -1,0 +1,9 @@
+{
+  "type": "storage_engine",
+  "so_name": "ha_mroonga",
+  "installable": true,
+  "source_code_type": "storage",
+  "storage": {
+    "dir_name": "mroonga"
+  }
+}

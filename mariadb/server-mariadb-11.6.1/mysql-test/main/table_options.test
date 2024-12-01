@@ -1,0 +1,113 @@
+SET @OLD_SQL_MODE=@@SQL_MODE;
+SET SQL_MODE='IGNORE_BAD_TABLE_OPTIONS';
+
+create table t1 (a int fkey=vvv, key akey (a) dff=vvv) tkey1='1v1';
+show create table t1;
+drop table t1;
+
+--echo #reassiginig options in the same line
+create table t1 (a int fkey=vvv, key akey (a) dff=vvv) tkey1=1v1 TKEY1=DEFAULT tkey1=1v2 tkey2=2v1;
+show create table t1;
+
+-- echo #add option
+alter table t1 tkey4=4v1;
+show create table t1;
+
+--echo #remove options 
+alter table t1 tkey3=DEFAULT tkey4=DEFAULT;
+show create table t1;
+
+drop table t1;
+
+create table t1 (a int fkey1=v1, key akey (a) kkey1=v1) tkey1=1v1 tkey1=1v2 TKEY1=DEFAULT tkey2=2v1 tkey3=3v1;
+show create table t1;
+
+--echo #change field with option with the same value
+alter table t1 change a a int `FKEY1`='v1';
+show create table t1;
+--echo #change field with option with a different value
+alter table t1 change a a int fkey1=v2;
+show create table t1;
+--echo #new column no options
+alter table t1 add column b int;
+show create table t1;
+--echo #new key with options
+alter table t1 add key bkey (b) kkey2=v1;
+show create table t1;
+--echo #new column with options
+alter table t1 add column c int fkey1=v1 fkey2=v2;
+show create table t1;
+--echo #new key no options
+alter table t1 add key ckey (c);
+show create table t1;
+--echo #drop column
+alter table t1 drop b;
+show create table t1;
+--echo #add column with options after delete
+alter table t1 add column b int fkey2=v1;
+show create table t1;
+--echo #add key 
+alter table t1 add key bkey (b) kkey2=v2;
+show create table t1;
+drop table t1;
+
+#numeric (unquoted) value
+create table t1 (a int) tkey1=100;
+show create table t1;
+drop table t1;
+
+--echo #error on unknown option
+SET SQL_MODE='';
+--error ER_UNKNOWN_OPTION
+create table t1 (a int fkey=vvv, key akey (a) dff=vvv) tkey1=1v1;
+
+SET @@SQL_MODE=@OLD_SQL_MODE;
+
+--echo #
+--echo # End of 5.5 tests
+--echo #
+
+--echo #
+--echo # MDEV-31822 ALTER TABLE ENGINE=x started failing instead of producing warning on unsupported TRANSACTIONAL=1
+--echo #
+create table t0 (a int) transactional=0 engine=aria;
+create table t1 (a int) transactional=1 engine=aria;
+create table t2 (a int) transactional=default engine=aria;
+show create table t0;
+show create table t1;
+show create table t2;
+alter table t0 engine=myisam;
+alter table t1 engine=myisam;
+alter table t2 engine=myisam;
+show create table t0;
+show create table t1;
+show create table t2;
+--error ER_UNKNOWN_OPTION
+alter table t0 engine=myisam transactional=0;
+--error ER_UNKNOWN_OPTION
+alter table t1 engine=myisam transactional=1;
+--error ER_UNKNOWN_OPTION
+alter table t2 engine=myisam transactional=default;
+set sql_mode=IGNORE_BAD_TABLE_OPTIONS;
+alter table t0 engine=myisam transactional=0;
+alter table t1 engine=myisam transactional=1;
+alter table t2 engine=myisam transactional=default;
+show create table t0;
+show create table t1;
+show create table t2;
+drop table t0,t1,t2;
+
+# same behavior for other unknown options:
+create table t1 (a int) foo=bar;
+show create table t1;
+set sql_mode=default;
+show create table t1;
+--error ER_UNKNOWN_OPTION
+alter table t1 engine=aria bar=foo;
+alter table t1 engine=aria;
+show create table t1;
+drop table t1;
+
+--echo #
+--echo # End of 10.5 tests
+--echo #

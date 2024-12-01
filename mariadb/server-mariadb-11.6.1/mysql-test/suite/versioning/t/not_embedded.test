@@ -1,0 +1,107 @@
+--source include/not_embedded.inc
+--source include/have_innodb.inc
+--source include/have_partition.inc
+
+--echo # 
+--echo # SYSTEM_VERSIONING_ASOF sysvar
+--echo #
+create table t (a int) with system versioning;
+set @before= UNIX_TIMESTAMP(now(6));
+insert into t values (1);
+set @after= UNIX_TIMESTAMP(now(6));
+update t set a= 2;
+
+set global system_versioning_asof= FROM_UNIXTIME(@after);
+set system_versioning_asof= FROM_UNIXTIME(@after);
+select * from t as nonempty;
+
+--connect (subcon,127.0.0.1,root,,,$SERVER_MYPORT_1)
+--connection subcon
+select * from t as nonempty;
+--disconnect subcon
+--connection default
+
+set global system_versioning_asof= FROM_UNIXTIME(@before);
+select * from t as nonempty;
+
+--connect (subcon,127.0.0.1,root,,,$SERVER_MYPORT_1)
+--connection subcon
+select * from t as empty;
+--disconnect subcon
+--connection default
+
+drop table t;
+
+set global system_versioning_asof= DEFAULT;
+set system_versioning_asof= DEFAULT;
+
+--echo #
+--echo # DELETE HISTORY and privileges
+--echo #
+
+# Save the initial number of concurrent sessions
+--source include/count_sessions.inc
+
+connect (root,localhost,root,,test);
+connection root;
+
+--disable_warnings
+create database mysqltest;
+--enable_warnings
+
+create user mysqltest_1@localhost;
+connect (user1,localhost,mysqltest_1,,"*NO-ONE*");
+connection user1;
+
+connection root;
+create table mysqltest.t (a int) with system versioning;
+
+connection user1;
+show grants;
+--error ER_TABLEACCESS_DENIED_ERROR
+delete history from mysqltest.t before system_time now();
+
+connection root;
+grant delete history on mysqltest.* to mysqltest_1@localhost;
+grant delete history on mysqltest.t to mysqltest_1@localhost;
+
+connection user1;
+show grants;
+delete history from mysqltest.t before system_time now();
+
+connection root;
+grant all on *.* to mysqltest_1@localhost;
+show grants for mysqltest_1@localhost;
+
+drop user mysqltest_1@localhost;
+drop database mysqltest;
+--disconnect user1
+--disconnect root
+--connection default
+
+--echo #
+--echo # MDEV-25559 Auto-create: infinite loop after interrupted lock wait
+--echo #
+
+set timestamp= unix_timestamp('2000-01-01 00:00:00');
+create table t (pk int primary key, a int) engine innodb with system versioning
+partition by system_time interval 1 hour auto;
+insert into t values (1, 0);
+begin;
+update t set a= a + 1;
+--connect (con1,localhost,root,,)
+set max_statement_time= 1;
+set timestamp= unix_timestamp('2000-01-01 01:00:00');
+send update t set a= a + 2;
+--connection default
+set timestamp= unix_timestamp('2000-01-01 01:00:00');
+send update t set a= a + 3;
+--connection con1
+--error ER_STATEMENT_TIMEOUT
+reap;
+--disconnect con1
+--connection default
+reap;
+commit;
+drop table t;
+set timestamp= default;

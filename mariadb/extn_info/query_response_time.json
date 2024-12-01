@@ -1,0 +1,9 @@
+{
+  "type": "information_schema",
+  "so_name": "query_response_time",
+  "installable": true,
+  "source_code_type": "core",
+  "core": {
+    "dir_name": "query_response_time"
+  }
+}

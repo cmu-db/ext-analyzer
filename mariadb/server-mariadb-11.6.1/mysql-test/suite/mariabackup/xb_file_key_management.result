@@ -1,0 +1,18 @@
+CREATE TABLE t(c TEXT) ENGINE INNODB encrypted=yes;
+INSERT INTO t VALUES(REPEAT('fubar',100));
+INSERT INTO t VALUES('foobar1');
+DELETE FROM t LIMIT 1;
+# xtrabackup backup
+NOT FOUND /foobar1/ in ib_logfile0
+# expect NOT FOUND
+INSERT INTO t VALUES('foobar2');
+# xtrabackup prepare
+# shutdown server
+# remove datadir
+# xtrabackup move back
+# restart
+ib_logfile0
+SELECT * FROM t;
+c
+foobar1
+DROP TABLE t;

@@ -1,0 +1,114 @@
+#
+# MW-336 Slave threads may leak if variable wsrep_slave_threads is set repeatedly
+#
+
+--source include/galera_cluster.inc
+--source include/force_restart.inc
+--source include/have_sequence.inc
+
+--connection node_1
+SET @wsrep_slave_threads_orig = @@wsrep_slave_threads;
+CREATE TABLE t1 (f1 INTEGER PRIMARY KEY AUTO_INCREMENT) Engine=InnoDB;
+
+SET GLOBAL wsrep_slave_threads = 10;
+
+# ensure that the threads have actually started running
+--echo # Set slave threads to 10 step 1
+--let $wait_condition = SELECT VARIABLE_VALUE = 10 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+--let $wait_condition_on_error_output = SELECT COUNT(*), 10 as EXPECTED_VALUE FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE = 'wsrep applier idle'; show processlist
+--source include/wait_condition_with_debug.inc
+
+SELECT VARIABLE_VALUE AS EXPECT_10 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+
+SET GLOBAL wsrep_slave_threads = 1;
+
+--connection node_2
+INSERT INTO t1 VALUES (NULL);
+
+--connection node_1
+--echo # Wait until one of the appliers has exited
+--let $wait_condition = SELECT VARIABLE_VALUE = 9 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+--let $wait_condition_on_error_output = SELECT COUNT(*), 9 as EXPECTED_VALUE FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE = 'wsrep applier idle'; show processlist
+--source include/wait_condition_with_debug.inc
+
+SELECT VARIABLE_VALUE AS EXPECT_9 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+
+SET GLOBAL wsrep_slave_threads = 10;
+
+# Note that above insert could be handled by one of the slave threads
+--echo # Set slave threads to 10 step 2
+--let $wait_condition = SELECT VARIABLE_VALUE = 10 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+--let $wait_condition_on_error_output = SELECT COUNT(*), 10 as EXPECTED_VALUE FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE = 'wsrep applier idle'; show processlist
+--source include/wait_condition_with_debug.inc
+
+SELECT VARIABLE_VALUE AS EXPECT_10 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+
+SET GLOBAL wsrep_slave_threads = 20;
+
+--echo # Set slave threads to 20
+--let $wait_condition = SELECT VARIABLE_VALUE = 20 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+--let $wait_condition_on_error_output = SELECT COUNT(*), 20 as EXPECTED_VALUE FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE = 'wsrep applier idle'; show processlist
+--source include/wait_condition_with_debug.inc
+
+SELECT VARIABLE_VALUE AS EXPECT_20 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+
+SET GLOBAL wsrep_slave_threads = 1;
+
+--connection node_2
+--disable_query_log
+let $c = 50;
+while ($c) {
+INSERT INTO t1 VALUES(NULL); COMMIT;
+dec $c;
+}
+--enable_query_log
+
+--connection node_1
+--let $wait_condition = SELECT COUNT(*) = 51 FROM t1;
+--let $wait_condition_on_error_output = SELECT COUNT(*) FROM t1;
+--source include/wait_condition_with_debug.inc
+
+--echo # Wait until 19 of the appliers has exited
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+--let $wait_condition_on_error_output = SELECT COUNT(*), 1 as EXPECTED_VALUE FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE = 'wsrep applier idle'; show processlist
+--source include/wait_condition_with_debug.inc
+
+SELECT VARIABLE_VALUE AS EXPECT_1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+
+SELECT COUNT(*) AS EXPECT_51 FROM t1;
+
+SET GLOBAL wsrep_slave_threads = 10;
+--echo # Set slave threads to 10 step 3
+--let $wait_condition = SELECT VARIABLE_VALUE = 10 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+--let $wait_condition_on_error_output = SELECT COUNT(*), 10 as EXPECTED_VALUE FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE = 'wsrep applier idle'; show processlist
+--source include/wait_condition_with_debug.inc
+
+SELECT VARIABLE_VALUE AS EXPECT_10 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+
+--connection node_1
+SET GLOBAL wsrep_slave_threads = 1;
+
+--connection node_2
+--disable_query_log
+let $c = 50;
+while ($c) {
+INSERT INTO t1 VALUES(NULL); COMMIT;
+dec $c;
+}
+--enable_query_log
+
+--connection node_1
+--echo # Wait until slave threads back to 1
+--let $wait_condition = SELECT VARIABLE_VALUE = 1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+--let $wait_condition_on_error_output = SELECT COUNT(*), 1 as EXPECTED_VALUE FROM INFORMATION_SCHEMA.PROCESSLIST WHERE USER = 'system user' AND STATE = 'wsrep applier idle'; show processlist
+--source include/wait_condition_with_debug.inc
+
+SELECT VARIABLE_VALUE AS EXPECT_1 FROM INFORMATION_SCHEMA.GLOBAL_STATUS WHERE VARIABLE_NAME = 'wsrep_applier_thread_count';
+
+SELECT COUNT(*) AS EXPECT_101 FROM t1;
+
+DROP TABLE t1;
+
+--disable_query_log
+SET GLOBAL wsrep_slave_threads = @wsrep_slave_threads_orig;
+--enable_query_log

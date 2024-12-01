@@ -1,0 +1,5 @@
+{
+  "type": "storage_engine",
+  "so_name": "ha_s3",
+  "installable": true
+}

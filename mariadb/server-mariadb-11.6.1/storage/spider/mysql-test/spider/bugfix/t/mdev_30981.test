@@ -1,0 +1,21 @@
+--echo #
+--echo # MDEV-30981 Spider UBSAN: null pointer passed as argument 2, which is declared to never be null in spider_create_trx_alter_table on ALTER
+--echo #
+
+# this test should be checked with ubsan
+
+--disable_query_log
+--disable_result_log
+--source ../../t/test_init.inc
+--enable_result_log
+--enable_query_log
+
+CREATE TABLE t (c INT) ENGINE=Spider PARTITION BY LIST (c) (PARTITION p VALUES IN (1,2));
+ALTER TABLE t ENGINE=InnoDB;
+drop table t;
+
+--disable_query_log
+--disable_result_log
+--source ../t/test_deinit.inc
+--enable_query_log
+--enable_result_log

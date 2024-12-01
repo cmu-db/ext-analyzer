@@ -1,0 +1,179 @@
+# switching from mysql.global_priv to mysql.user
+drop view mysql.user_bak;
+install soname 'ha_blackhole';
+install soname 'ha_archive';
+create table t1 (a int) engine=blackhole;
+create table t2 (a int) engine=archive;
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t1';
+table_catalog	def
+table_schema	test
+table_name	t1
+table_type	BASE TABLE
+engine	BLACKHOLE
+row_format	Fixed
+table_rows	2
+data_length	0
+table_comment	
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t2';
+table_catalog	def
+table_schema	test
+table_name	t2
+table_type	BASE TABLE
+engine	ARCHIVE
+row_format	Compressed
+table_rows	0
+data_length	521
+table_comment	
+flush tables;
+uninstall plugin blackhole;
+uninstall plugin archive;
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t1';
+table_catalog	def
+table_schema	test
+table_name	t1
+table_type	BASE TABLE
+engine	BLACKHOLE
+row_format	NULL
+table_rows	NULL
+data_length	NULL
+table_comment	Unknown storage engine 'BLACKHOLE'
+Warnings:
+Level	Warning
+Code	1286
+Message	Unknown storage engine 'BLACKHOLE'
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t2';
+table_catalog	def
+table_schema	test
+table_name	t2
+table_type	BASE TABLE
+engine	ARCHIVE
+row_format	NULL
+table_rows	NULL
+data_length	NULL
+table_comment	Unknown storage engine 'ARCHIVE'
+Warnings:
+Level	Warning
+Code	1286
+Message	Unknown storage engine 'ARCHIVE'
+# upgrade from 10.1 - engines aren't enabled
+test.t1
+Error    : Unknown storage engine 'BLACKHOLE'
+error    : Corrupt
+test.t2
+Error    : Unknown storage engine 'ARCHIVE'
+error    : Corrupt
+test.t1
+Error    : Unknown storage engine 'BLACKHOLE'
+error    : Corrupt
+test.t2
+Error    : Unknown storage engine 'ARCHIVE'
+error    : Corrupt
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t1';
+table_catalog	def
+table_schema	test
+table_name	t1
+table_type	BASE TABLE
+engine	BLACKHOLE
+row_format	NULL
+table_rows	NULL
+data_length	NULL
+table_comment	Unknown storage engine 'BLACKHOLE'
+Warnings:
+Level	Warning
+Code	1286
+Message	Unknown storage engine 'BLACKHOLE'
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t2';
+table_catalog	def
+table_schema	test
+table_name	t2
+table_type	BASE TABLE
+engine	ARCHIVE
+row_format	NULL
+table_rows	NULL
+data_length	NULL
+table_comment	Unknown storage engine 'ARCHIVE'
+Warnings:
+Level	Warning
+Code	1286
+Message	Unknown storage engine 'ARCHIVE'
+drop table mysql.global_priv;
+rename table mysql.global_priv_bak to mysql.global_priv;
+# switching from mysql.global_priv to mysql.user
+drop view mysql.user_bak;
+alter table mysql.user drop column default_role, drop column max_statement_time;
+# still upgrade from 10.1
+test.t1
+Error    : Unknown storage engine 'BLACKHOLE'
+error    : Corrupt
+test.t2
+Error    : Unknown storage engine 'ARCHIVE'
+error    : Corrupt
+test.t1
+Error    : Unknown storage engine 'BLACKHOLE'
+error    : Corrupt
+test.t2
+Error    : Unknown storage engine 'ARCHIVE'
+error    : Corrupt
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t1';
+table_catalog	def
+table_schema	test
+table_name	t1
+table_type	BASE TABLE
+engine	BLACKHOLE
+row_format	NULL
+table_rows	NULL
+data_length	NULL
+table_comment	Unknown storage engine 'BLACKHOLE'
+Warnings:
+Level	Warning
+Code	1286
+Message	Unknown storage engine 'BLACKHOLE'
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t2';
+table_catalog	def
+table_schema	test
+table_name	t2
+table_type	BASE TABLE
+engine	ARCHIVE
+row_format	NULL
+table_rows	NULL
+data_length	NULL
+table_comment	Unknown storage engine 'ARCHIVE'
+Warnings:
+Level	Warning
+Code	1286
+Message	Unknown storage engine 'ARCHIVE'
+drop table mysql.global_priv;
+rename table mysql.global_priv_bak to mysql.global_priv;
+# switching from mysql.global_priv to mysql.user
+drop view mysql.user_bak;
+alter table mysql.user drop column default_role, drop column max_statement_time;
+# upgrade from 10.0 - engines are enabled
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t1';
+table_catalog	def
+table_schema	test
+table_name	t1
+table_type	BASE TABLE
+engine	BLACKHOLE
+row_format	Fixed
+table_rows	2
+data_length	0
+table_comment	
+select table_catalog, table_schema, table_name, table_type, engine, row_format, table_rows, data_length, table_comment from information_schema.tables where table_schema='test' and table_name='t2';
+table_catalog	def
+table_schema	test
+table_name	t2
+table_type	BASE TABLE
+engine	ARCHIVE
+row_format	Compressed
+table_rows	0
+data_length	521
+table_comment	
+drop table t1, t2;
+uninstall plugin blackhole;
+uninstall plugin archive;
+drop table mysql.global_priv;
+rename table mysql.global_priv_bak to mysql.global_priv;
+FLUSH PRIVILEGES;
+SHOW GRANTS FOR root@localhost;
+Grants for root@localhost	GRANT ALL PRIVILEGES ON *.* TO `root`@`localhost` WITH GRANT OPTION
+Grants for root@localhost	GRANT PROXY ON ''@'%' TO 'root'@'localhost' WITH GRANT OPTION

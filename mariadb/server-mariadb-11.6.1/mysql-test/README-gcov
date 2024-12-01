@@ -1,0 +1,8 @@
+To be able to see the level of coverage with the current test suite,
+do the following:
+
+  - Make sure gcov is installed
+  - Compile the MariaDB distribution with -DENABLE_GCOV=1
+  - In the mysql-test directory, run this command: `./mysql-test-run --gcov`
+  - see var/last_changes.dgcov for the coverage of uncommitted code
+  - see `./dgcov -h` for more options

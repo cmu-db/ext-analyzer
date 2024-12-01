@@ -1,0 +1,11 @@
+SET @start_global_value = @@global.alter_algorithm;
+
+SELECT @@global.alter_algorithm;
+SET GLOBAL alter_algorithm=2;
+SELECT @@global.alter_algorithm;
+--error ER_WRONG_VALUE_FOR_VAR
+SET GLOBAL alter_algorithm=5;
+SELECT @@global.alter_algorithm;
+
+SET SESSION alter_algorithm=INSTANT;
+SHOW SESSION VARIABLES LIKE 'alter_algorithm';

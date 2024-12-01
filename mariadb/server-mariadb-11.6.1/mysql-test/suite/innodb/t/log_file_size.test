@@ -1,0 +1,175 @@
+# Test resizing the InnoDB redo log.
+--source include/innodb_page_size_small.inc
+# Embedded server tests do not support restarting
+--source include/not_embedded.inc
+# DBUG_EXECUTE_IF is needed
+--source include/have_debug.inc
+# This test is slow on buildbot.
+--source include/big_test.inc
+
+--disable_query_log
+call mtr.add_suppression("syntax error in innodb_log_group_home_dir");
+call mtr.add_suppression("Plugin 'InnoDB' init function returned error");
+call mtr.add_suppression("Plugin 'InnoDB' registration as a STORAGE ENGINE failed");
+call mtr.add_suppression("InnoDB: Plugin initialization aborted");
+call mtr.add_suppression("InnoDB: innodb_read_only prevents crash recovery");
+call mtr.add_suppression("InnoDB: Log file .*ib_logfile1.* size");
+call mtr.add_suppression("InnoDB: File .*ib_logfile0 (is too small|was not found)");
+call mtr.add_suppression("InnoDB: Expecting only ib_logfile0");
+FLUSH TABLES;
+--enable_query_log
+let MYSQLD_DATADIR= `select @@datadir`;
+CREATE TABLE t1(a INT PRIMARY KEY) ENGINE=InnoDB;
+
+--source include/shutdown_mysqld.inc
+perl;
+do "$ENV{MTR_SUITE_DIR}/include/crc32.pl";
+my $file = "$ENV{MYSQLD_DATADIR}ib_logfile0";
+open(FILE, "<$file") || die "Unable to open $file\n";
+seek(FILE, 4096, 0) || die "Unable to seek $file\n";
+die unless read(FILE, $_, 8) == 8;
+my ($lsn_hi,$lsn_lo) = unpack("NN", $_);
+seek(FILE, 8192, 0) || die "Unable to seek $file\n";
+die unless read(FILE, $_, 8) == 8;
+my ($cp2hi,$cp2lo) = unpack("NN", $_);
+if ($cp2hi < $lsn_hi) {}
+elsif ($cp2hi > $lsn_hi || $cp2lo > $lsn_lo)
+{ $lsn_hi=$cp2hi;$lsn_lo=$cp2lo; }
+close(FILE);
+open(FILE, ">", $file) or die "Unable to open $file\n";
+binmode FILE;
+my $polynomial = 0x82f63b78; # CRC-32C
+my ($header, $checkpoint, $log);
+$header = "Phys" . pack("x[4]NN", $lsn_hi, $lsn_lo) .
+          "some Perl code" . pack("x[478]");
+$header .= pack("Nx[3584]", mycrc32($header, 0, $polynomial));
+$checkpoint = pack("NNNNx[44]", $lsn_hi, $lsn_lo, $lsn_hi, $lsn_lo);
+$checkpoint .= pack("Nx[8128]", mycrc32($checkpoint, 0, $polynomial));
+$log = pack("CxxNN", 0xfa, $lsn_hi, $lsn_lo);
+$log .= pack("CN", 1, mycrc32($log, 0, $polynomial));
+print FILE $header, $checkpoint, $log;
+close(FILE) or die "Unable to close $file\n";
+EOF
+
+let $check_no_innodb=SELECT * FROM INFORMATION_SCHEMA.ENGINES
+WHERE engine = 'innodb'
+AND support IN ('YES', 'DEFAULT', 'ENABLED');
+
+--let $restart_parameters= --innodb-log-file-size=4m
+--source include/start_mysqld.inc
+
+let SEARCH_FILE= $MYSQLTEST_VARDIR/log/mysqld.1.err;
+CHECK TABLE t1;
+
+--let $restart_parameters= --innodb-log-file-size=20M
+--source include/restart_mysqld.inc
+
+BEGIN;
+INSERT INTO t1 VALUES (42);
+
+let $restart_parameters = --innodb-log-file-size=12M;
+let $shutdown_timeout=0;
+--source include/restart_mysqld.inc
+
+SELECT * FROM t1;
+
+INSERT INTO t1 VALUES (42);
+BEGIN;
+DELETE FROM t1;
+
+let $restart_parameters = --innodb-log-file-size=5M;
+--source include/restart_mysqld.inc
+let $shutdown_timeout=;
+
+SELECT * FROM t1;
+
+INSERT INTO t1 VALUES (0),(123);
+
+let SEARCH_ABORT = NOT FOUND;
+
+BEGIN;
+DELETE FROM t1 WHERE a>0;
+
+--echo # Persist the state of the above incomplete transaction by
+--echo # causing a redo log write for another transaction.
+--connect(con1, localhost, root)
+SET GLOBAL innodb_flush_log_at_trx_commit=1;
+DELETE FROM t1 WHERE a=0;
+--disconnect con1
+--connection default
+
+--source include/kill_mysqld.inc
+
+--let $restart_parameters= --innodb-log-group-home-dir=foo\;bar
+--source include/start_mysqld.inc
+--error ER_UNKNOWN_STORAGE_ENGINE
+SELECT * FROM t1;
+let SEARCH_PATTERN= syntax error in innodb_log_group_home_dir;
+--source include/search_pattern_in_file.inc
+
+--let $restart_parameters= --debug-dbug=d,innodb_log_abort_1
+--source include/restart_mysqld.inc
+--error ER_UNKNOWN_STORAGE_ENGINE
+SELECT * FROM t1;
+let SEARCH_PATTERN= InnoDB: Starting crash recovery from checkpoint LSN=.*;
+--source include/search_pattern_in_file.inc
+
+--let $restart_parameters= --innodb-read-only
+--source include/restart_mysqld.inc
+
+--error ER_UNKNOWN_STORAGE_ENGINE
+SELECT * FROM t1;
+let SEARCH_PATTERN= InnoDB: innodb_read_only prevents crash recovery;
+--source include/search_pattern_in_file.inc
+
+--let $restart_parameters= --debug-dbug=d,innodb_log_abort_5
+--source include/restart_mysqld.inc
+--error ER_UNKNOWN_STORAGE_ENGINE
+SELECT * FROM t1;
+let SEARCH_PATTERN= redo log from 5\\.000MiB to [0-9.]*[KMGT]iB;
+--source include/search_pattern_in_file.inc
+
+--let $restart_parameters= --innodb-read-only
+--source include/restart_mysqld.inc
+--error ER_UNKNOWN_STORAGE_ENGINE
+SELECT * FROM t1;
+let SEARCH_PATTERN= InnoDB: innodb_read_only prevents crash recovery;
+--source include/search_pattern_in_file.inc
+
+# Trigger an error in recovery.
+
+--move_file $MYSQLD_DATADIR/ib_logfile0 $MYSQLD_DATADIR/ib_logfile101
+--write_file $MYSQLD_DATADIR/ib_logfile0
+garbage
+EOF
+
+--let $restart_parameters=
+--source include/restart_mysqld.inc
+--error ER_UNKNOWN_STORAGE_ENGINE
+SELECT * FROM t1;
+let SEARCH_PATTERN= InnoDB: File .*ib_logfile0 is too small;
+--source include/search_pattern_in_file.inc
+--move_file $MYSQLD_DATADIR/ib_logfile0 $MYSQLD_DATADIR/ib_logfile1
+--move_file $MYSQLD_DATADIR/ib_logfile101 $MYSQLD_DATADIR/ib_logfile0
+
+--source include/restart_mysqld.inc
+--error ER_UNKNOWN_STORAGE_ENGINE
+SELECT * FROM t1;
+let SEARCH_PATTERN= InnoDB: Expecting only ib_logfile0;
+--source include/search_pattern_in_file.inc
+
+--remove_file $MYSQLD_DATADIR/ib_logfile1
+--move_file $MYSQLD_DATADIR/ib_logfile0 $MYSQLD_DATADIR/ib_logfile101
+
+--source include/restart_mysqld.inc
+--error ER_UNKNOWN_STORAGE_ENGINE
+let SEARCH_PATTERN= InnoDB: File .*ib_logfile0 was not found;
+--source include/search_pattern_in_file.inc
+--move_file $MYSQLD_DATADIR/ib_logfile101 $MYSQLD_DATADIR/ib_logfile0
+
+--source include/restart_mysqld.inc
+SELECT * FROM t1;
+DROP TABLE t1;
+
+--let SEARCH_PATTERN= InnoDB: Resizing redo log from 5\\.000MiB to [0-9.]*[KMGT]iB; LSN=\\d+\\b
+--source include/search_pattern_in_file.inc

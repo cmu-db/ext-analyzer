@@ -1,0 +1,8 @@
+{
+  "type": "audit",
+  "installable": false,
+  "source_code_type": "core",
+    "core": {
+      "dir_name": "test_sql_service"
+    }
+}

@@ -1,0 +1,21 @@
+--echo #
+--echo # MDEV-26541 Undefined symbol: _ZTI12ha_partition when attempting to use ha_spider.so in UBSAN builds
+--echo #
+
+# this test should be checked with ubsan
+
+# init spider
+
+INSTALL SONAME 'ha_spider.so';
+
+let $PLUGIN_NAME= spider_flush_table_mon_cache;
+let $PLUGIN_EXIST=
+  `SELECT COUNT(*) FROM mysql.func WHERE name = '$PLUGIN_NAME'`;
+while (!$PLUGIN_EXIST)
+{
+  let $PLUGIN_EXIST=
+    `SELECT COUNT(*) FROM mysql.func WHERE name = '$PLUGIN_NAME'`;
+}
+
+--disable_query_log
+--source ../../include/clean_up_spider.inc

@@ -1,0 +1,49 @@
+# t/handler_innodb.test
+#
+# test of HANDLER ...
+#
+# Last update:
+# 2006-07-31 ML test refactored (MySQL 5.1)
+#               code of t/handler.test and t/innodb_handler.test united
+#               main testing code put into handler.inc
+#               rename t/innodb_handler.test to t/handler_innodb.test
+#
+
+--source include/have_innodb.inc
+
+let $engine_type= InnoDB;
+
+--source init.inc
+--source handler.inc
+--source savepoint.inc
+
+#
+# LP#697610 ha_index_prev(uchar*): Assertion `inited==INDEX'
+#
+
+CREATE TABLE t1 (f1 integer, f2 integer, primary key (f1), key (f2)) engine=innodb;
+INSERT INTO t1 VALUES (1,1),(2,2),(3,3);
+HANDLER t1 OPEN;
+HANDLER t1 READ FIRST WHERE f2 <= 1;
+HANDLER t1 READ `PRIMARY` PREV;
+DROP TABLE t1;
+
+--echo #
+--echo # 10.2 Test
+--echo #
+--echo # MDEV-20207: Assertion `! is_set()' failed in
+--echo # Diagnostics_area::set_eof_status upon HANDLER READ
+--echo #
+
+DROP TABLE IF EXISTS t1;
+
+CREATE TABLE t1 (a POINT, KEY(a));
+HANDLER t1 OPEN h;
+
+--error ER_CANT_CREATE_GEOMETRY_OBJECT
+HANDLER h READ a = (0);
+
+HANDLER h CLOSE;
+DROP TABLE t1;
+
+--echo # End of 10.2 Test
