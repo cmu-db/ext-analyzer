@@ -7,3 +7,6 @@
 [submodule "redis/redis"]
 	path = redis/redis
 	url = https://github.com/redis/redis.git
+[submodule "index-type-analysis"]
+	path = index-type-analysis
+	url = https://github.com/abigalekim/index-type-analysis.git
