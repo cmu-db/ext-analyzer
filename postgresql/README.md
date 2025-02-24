@@ -1,17 +1,16 @@
 # pgext-analyzer
-Python scripts for generating compatibility tables and source code analysis. This is a work in progress, and for now is badly documented :,) Feel free to submit PRs and offer feedback, we would love to hear it.
+Python scripts for generating compatibility tables and source code analysis. 
 
 # Specifications
-- Runs on machine with Ubuntu 22.04. Compatibility with other OSes is not supported.
 - The tools use PostgreSQL 15.3. Compatibility with other versions of PostgreSQL is not supported.
+- You will also need to run this on a machine where you have root access.
 
 # Dependencies
-## Compatibility Analysis Dependencies
+Here are the Ubuntu packages you need to install to run the PostgreSQL analysis scripts:
 - readline
 - flex (for pg_tle)
-- mysql (for mysql_fdw), mysql runs with root
+- mysql (for mysql_fdw) (also make MySQL run with root)
 - libmysqlclient-dev (for mysql_fdw)
-- create ~/.my.cnf file with root user and password
 - libossp-uuid-dev (uuid-ossp)
 - libipc-run-perl
 - libperl-dev
@@ -19,9 +18,13 @@ Python scripts for generating compatibility tables and source code analysis. Thi
 - ninja-build
 - libsybdb5 freetds-dev freetds-common (tds_fdw)
 
+Lastly, for the `mysql_fdw` extension, you will need to create a `~/.my.cnf` file with root user and password.
+
 ## Source Code Analysis Dependencies
 - PMD CPD (https://github.com/pmd/pmd/releases/tag/pmd_releases/7.0.0-rc4)
 - sctokenizer (https://pypi.org/project/sctokenizer/)
+
+After installing PMD CPD you will need to put it in this directory (`PATH_TO_PROJECT/ext-analyzer/postgresql`).
 
 ## Static Analysis Dependencies
 - semgrep (pip install semgrep)
